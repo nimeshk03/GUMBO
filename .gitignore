@@ -113,4 +113,15 @@ dmypy.json
 .pytype/
 
 # Cython debug symbols
-cython_debug/ 
+cython_debug/
+
+# Database files
+*.db
+
+# AI model output directories
+gpt-4o-mini/
+gpt-4o/
+claude-*/
+
+# Empty/temp directories
+gumcp/ 

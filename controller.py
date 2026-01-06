@@ -27,7 +27,16 @@ import pytz
 import json
 
 import uvicorn
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile, status, Request
+from fastapi import (
+    Depends,
+    FastAPI,
+    File,
+    Form,
+    HTTPException,
+    UploadFile,
+    status,
+    Request
+)
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 try:
@@ -79,6 +88,45 @@ except ImportError as e:
 # Load environment variables
 load_dotenv(override=True)  # Ensure .env takes precedence
 
+def _str_to_bool(value: Optional[str], default: bool = False) -> bool:
+    """Convert common truthy/falsy strings to bool."""
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "t", "yes", "y", "on"}
+
+
+def _parse_env_list(key: str, fallback: List[str]) -> List[str]:
+    """Parse a comma-separated environment variable into a list."""
+    raw = os.getenv(key)
+    if not raw:
+        return fallback
+    return [item.strip() for item in raw.split(",") if item.strip()]
+
+
+# API authentication token (required for protected routes)
+API_AUTH_TOKEN = os.getenv("API_AUTH_TOKEN")
+
+# CORS configuration from environment with safer defaults
+ALLOWED_ORIGINS = _parse_env_list(
+    "ALLOWED_ORIGINS",
+    ["http://localhost:3000", "http://localhost:8000"]
+)
+ALLOWED_METHODS = _parse_env_list(
+    "ALLOWED_METHODS",
+    ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
+)
+ALLOWED_HEADERS = _parse_env_list(
+    "ALLOWED_HEADERS",
+    ["Authorization", "Content-Type"]
+)
+ALLOW_CREDENTIALS = _str_to_bool(os.getenv("ALLOW_CREDENTIALS"), False)
+CORS_MAX_AGE = int(os.getenv("CORS_MAX_AGE", "86400"))
+
+# Documentation exposure
+ENABLE_API_DOCS = _str_to_bool(os.getenv("ENABLE_API_DOCS"), False)
+DOCS_URL = "/docs" if ENABLE_API_DOCS else None
+REDOC_URL = "/redoc" if ENABLE_API_DOCS else None
+
 # Configure logging with user-friendly format
 logging.basicConfig(
     level=logging.INFO,
@@ -95,23 +143,64 @@ import sys
 import os
 os.environ['PYTHONUNBUFFERED'] = '1'
 
+PROTECTED_PATH_PREFIXES = ("/monitoring", "/admin")
+
+
+def _extract_token(request: Request) -> Optional[str]:
+    """Extract bearer or API key token from headers."""
+    auth_header = request.headers.get("authorization") or request.headers.get("Authorization")
+    if auth_header:
+        parts = auth_header.split()
+        if len(parts) == 2 and parts[0].lower() in {"bearer", "token", "api-key", "apikey"}:
+            return parts[1]
+    api_key_header = request.headers.get("x-api-key")
+    if api_key_header:
+        return api_key_header.strip()
+    return None
+
+
+async def require_api_auth(request: Request) -> None:
+    """Enforce API token on protected endpoints."""
+    if not API_AUTH_TOKEN:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="API authentication token not configured"
+        )
+    token = _extract_token(request)
+    if token != API_AUTH_TOKEN:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or missing API authentication token",
+            headers={"WWW-Authenticate": "Bearer"}
+        )
+
 # Initialize FastAPI app
 app = FastAPI(
     title="GUM API",
     description="REST API for submitting observations and querying user behavior insights",
     version="1.0.0",
-    docs_url="/docs",
-    redoc_url="/redoc"
+    docs_url=DOCS_URL,
+    redoc_url=REDOC_URL
 )
 
 # Add CORS middleware to allow frontend connections
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # In production, replace with specific origins
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=ALLOWED_ORIGINS,
+    allow_credentials=ALLOW_CREDENTIALS,
+    allow_methods=ALLOWED_METHODS,
+    allow_headers=ALLOWED_HEADERS,
+    max_age=CORS_MAX_AGE
 )
+
+
+@app.middleware("http")
+async def auth_middleware(request: Request, call_next):
+    """Protect sensitive routes with API token authentication."""
+    path = request.url.path
+    if any(path.startswith(prefix) for prefix in PROTECTED_PATH_PREFIXES):
+        await require_api_auth(request)
+    return await call_next(request)
 
 # Global GUM instance
 gum_instance: Optional[gum] = None
@@ -214,28 +303,6 @@ class SuggestionsResponse(BaseModel):
     time_range_hours: float = Field(..., description="Time range of data analyzed in hours")
     generated_at: str = Field(..., description="When suggestions were generated")
 
-
-# Chat Models
-class ChatMessage(BaseModel):
-    """Individual chat message."""
-    role: str = Field(..., description="Message role: user or assistant")
-    content: str = Field(..., description="Message content")
-    timestamp: str = Field(..., description="When message was sent")
-
-
-class ChatRequest(BaseModel):
-    """Request model for chat endpoint."""
-    message: str = Field(..., description="User message", max_length=2000)
-    suggestion_context: Optional[dict] = Field(None, description="Original suggestion context for contextual chat")
-    chat_history: Optional[List[ChatMessage]] = Field(default_factory=list, description="Previous messages in this conversation")
-
-
-class ChatResponse(BaseModel):
-    """Response model for chat endpoint."""
-    message: str = Field(..., description="AI response message")
-    timestamp: str = Field(..., description="When response was generated")
-    context_used: bool = Field(..., description="Whether suggestion context was used")
-    conversation_id: str = Field(..., description="Unique identifier for this conversation")
 
 
 # === Mock Observer Class ===
@@ -652,7 +719,7 @@ async def rate_limit_middleware(request: Request, call_next):
 
 # Add rate limit monitoring endpoint
 @app.get("/admin/rate-limits", response_model=dict)
-async def get_rate_limit_stats():
+async def get_rate_limit_stats(request: Request, _auth: None = Depends(require_api_auth)):
     """Get rate limiting statistics for monitoring"""
     try:
         global_stats = rate_limiter.get_global_stats()
@@ -676,7 +743,7 @@ async def get_rate_limit_stats():
 
 # Add rate limit reset endpoint (admin only)
 @app.post("/admin/rate-limits/reset", response_model=dict)
-async def reset_rate_limits(endpoint: Optional[str] = None):
+async def reset_rate_limits(endpoint: Optional[str] = None, _auth: None = Depends(require_api_auth)):
     """Reset rate limits for specific endpoint or all endpoints"""
     try:
         if endpoint:
@@ -1803,232 +1870,9 @@ async def generate_suggestions(
             detail=f"Error generating suggestions: {str(e)}"
         )
 
-
-async def find_related_propositions_for_chat(session, suggestion_context, recent_observations, limit=100):
-    """Find propositions related to current chat context using existing search infrastructure."""
-    
-    # Build search query from multiple sources
-    search_terms = []
-    
-    # 1. From suggestion context
-    if suggestion_context:
-        search_terms.append(suggestion_context.get('title', ''))
-        search_terms.append(suggestion_context.get('description', ''))
-        search_terms.append(' '.join(suggestion_context.get('action_items', [])))
-    
-    # 2. From recent observations (extract key entities)
-    for obs in recent_observations[-3:]:
-        # Extract app names, document titles, key activities
-        content = obs.content
-        
-        # Simple keyword extraction
-        import re
-        apps = re.findall(r'\*\*Application Name:\*\* (.+)', content)
-        docs = re.findall(r'\*\*Document:\*\* (.+)', content)
-        urls = re.findall(r'https?://([^/\s]+)', content)
-        
-        search_terms.extend(apps + docs + urls)
-    
-    # 3. Combine into search query (limit tokens for performance)
-    combined_query = ' '.join(search_terms[:20])
-    
-    if not combined_query.strip():
-        return []
-    
-    try:
-        # Use existing search infrastructure
-        from gum.db_utils import search_propositions_bm25
-        
-        related_props = await search_propositions_bm25(
-            session,
-            combined_query,
-            limit=limit,
-            mode="OR", 
-            include_observations=False,
-            enable_mmr=True,
-            enable_decay=True
-        )
-        
-        # Filter by confidence (only high-confidence propositions for chat)
-        return [(prop, score) for prop, score in related_props if prop.confidence >= 7]
-        
-    except Exception as e:
-        logger.warning(f"Failed to search related propositions for chat: {e}")
-        return []
-
-
-@app.post("/chat/suggestion", response_model=ChatResponse)
-async def chat_with_suggestion(
-    request: ChatRequest,
-    user_name: Optional[str] = None
-):
-    """Chat about a specific suggestion with full context awareness."""
-    import uuid
-    import hashlib
-    
-    try:
-        start_time = time.time()
-        logger.info(f"Starting contextual chat for {user_name}")
-        
-        # Validate message length
-        if not request.message or not request.message.strip():
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Message cannot be empty"
-            )
-        
-        # Get AI client
-        client = await get_ai_client()
-        current_time = datetime.now(timezone.utc)
-        
-        # Generate conversation ID based on suggestion context
-        if request.suggestion_context:
-            context_str = f"{request.suggestion_context.get('title', '')}{request.suggestion_context.get('description', '')}"
-            conversation_id = hashlib.md5(context_str.encode()).hexdigest()[:8]
-        else:
-            conversation_id = str(uuid.uuid4())[:8]
-        
-        # Prepare chat context
-        context_used = bool(request.suggestion_context)
-        
-        if request.suggestion_context and context_used:
-            # Use contextual chat prompt with suggestion details
-            from gum.prompts.gum import CHAT_PROMPT
-            
-            # Format chat history for prompt
-            chat_history_text = ""
-            if request.chat_history:
-                for msg in request.chat_history[-10:]:  # Last 10 messages for context
-                    role_label = "You" if msg.role == "assistant" else user_name or "User"
-                    chat_history_text += f"**{role_label}:** {msg.content}\n\n"
-            
-            # Get supporting transcription data and related propositions
-            transcription_context = ""
-            proposition_context = ""
-            try:
-                gum_inst = await ensure_gum_instance(user_name)
-                async with gum_inst._session() as session:
-                    from gum.models import Observation
-                    from sqlalchemy import select, desc
-                    from datetime import timedelta
-                    
-                    # Get recent transcriptions for additional context
-                    recent_time = current_time - timedelta(hours=6)
-                    stmt = (
-                        select(Observation)
-                        .where(
-                            Observation.created_at >= recent_time,
-                            Observation.observer_name == "Screen"
-                        )
-                        .order_by(desc(Observation.created_at))
-                        .limit(5)  # Just a few recent ones for context
-                    )
-                    result = await session.execute(stmt)
-                    recent_observations = result.scalars().all()
-                    
-                    if recent_observations:
-                        transcription_context = "\n\n".join([
-                            f"=== {serialize_datetime(parse_datetime(obs.created_at))} ===\n{obs.content}"
-                            for obs in recent_observations[-3:]  # Most recent 3
-                        ])
-                    else:
-                        transcription_context = "No recent transcription data available."
-                    
-                    # Get related propositions for cross-time context
-                    related_props = await find_related_propositions_for_chat(
-                        session, 
-                        request.suggestion_context, 
-                        recent_observations
-                    )
-                    
-                    if related_props:
-                        proposition_context = "\n\n# Historical Context (What I know about you from past observations):\n"
-                        for prop, score in related_props:
-                            # Include proposition with confidence and reasoning snippet
-                            reasoning_snippet = prop.reasoning[:100] + "..." if len(prop.reasoning) > 100 else prop.reasoning
-                            proposition_context += f"- {prop.text} (confidence: {prop.confidence}/10)\n"
-                            proposition_context += f"  Evidence: {reasoning_snippet}\n\n"
-                    else:
-                        proposition_context = "\n\n# Historical Context: No related patterns found.\n"
-                        
-            except Exception as e:
-                logger.warning(f"Could not fetch context: {e}")
-                transcription_context = "Transcription context unavailable."
-                proposition_context = ""
-            
-            # Build the contextual prompt with proposition context
-            enhanced_transcription_context = transcription_context + proposition_context
-            
-            prompt = CHAT_PROMPT.format(
-                user_name=user_name or "User",
-                suggestion_title=request.suggestion_context.get('title', 'Suggestion'),
-                suggestion_description=request.suggestion_context.get('description', ''),
-                suggestion_evidence=request.suggestion_context.get('evidence', ''),
-                action_items='\n'.join([f"- {item}" for item in request.suggestion_context.get('action_items', [])]),
-                transcription_context=enhanced_transcription_context,
-                chat_history=chat_history_text,
-                user_message=request.message
-            )
-            
-        else:
-            # Fallback to general chat without specific context
-            chat_history_text = ""
-            if request.chat_history:
-                for msg in request.chat_history[-10:]:
-                    role_label = "Assistant" if msg.role == "assistant" else user_name or "User"
-                    chat_history_text += f"{role_label}: {msg.content}\n"
-            
-            prompt = f"""You are a helpful AI assistant. Continue this conversation naturally.
-
-Previous conversation:
-{chat_history_text}
-
-{user_name or 'User'}: {request.message}
-
-Provide a helpful, conversational response:"""
-        
-        logger.info(f"Generated chat prompt (length: {len(prompt)} characters)")
-        
-        # Get AI response
-        try:
-            response_content = await client.text_completion(
-                messages=[{"role": "user", "content": prompt}],
-                max_tokens=1500,
-                temperature=0.3
-            )
-            
-            logger.info(f"Received chat response (length: {len(response_content)} characters)")
-            
-        except Exception as ai_error:
-            logger.error(f"AI chat completion failed: {ai_error}")
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Failed to generate chat response"
-            )
-        
-        processing_time = (time.time() - start_time) * 1000
-        logger.info(f"Chat response generated in {processing_time:.2f}ms")
-        
-        return ChatResponse(
-            message=response_content.strip(),
-            timestamp=serialize_datetime(current_time),
-            context_used=context_used,
-            conversation_id=conversation_id
-        )
-        
-    except HTTPException:
-        # Re-raise HTTP exceptions
-        raise
-    except Exception as e:
-        logger.error(f"Error in chat endpoint: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Chat error: {str(e)}"
-        )
-
-
 # Video processing storage
 video_processing_jobs = {}
+
 
 
 async def generate_video_insights(frame_analyses: List[str], filename: str) -> dict:
@@ -2858,8 +2702,10 @@ async def startup_event():
 app.add_event_handler("startup", startup_event)
 
 
-def run_server(host: str = "0.0.0.0", port: int = 8000, reload: bool = False):
+def run_server(host: str = None, port: int = None, reload: bool = False):
     """Run the FastAPI server."""
+    host = host or os.getenv("BIND_HOST", "127.0.0.1")
+    port = port or int(os.getenv("BIND_PORT", "8000"))
     # Use logging for startup banner too
     logger.info("=" * 60)
     logger.info(" GUM AI Video Processing Server Starting Up")
@@ -2883,8 +2729,8 @@ if __name__ == "__main__":
     import argparse
     
     parser = argparse.ArgumentParser(description="GUM REST API Controller")
-    parser.add_argument("--host", default="0.0.0.0", help="Host to bind to")
-    parser.add_argument("--port", type=int, default=8000, help="Port to bind to")
+    parser.add_argument("--host", default=None, help="Host to bind to (defaults to BIND_HOST or 127.0.0.1)")
+    parser.add_argument("--port", type=int, default=None, help="Port to bind to (defaults to BIND_PORT or 8000)")
     parser.add_argument("--reload", action="store_true", help="Enable auto-reload for development")
     
     args = parser.parse_args()

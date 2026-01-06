@@ -10,6 +10,7 @@ import http.server
 import socketserver
 from pathlib import Path
 from urllib.parse import urlparse
+from typing import List
 
 class ZavionFrontendHandler(http.server.SimpleHTTPRequestHandler):
     """Custom handler to serve the frontend files."""
@@ -17,6 +18,7 @@ class ZavionFrontendHandler(http.server.SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
         # Set the directory to serve from
         self.frontend_dir = Path(__file__).parent
+        self.allowed_origins = self._parse_allowed_origins()
         super().__init__(*args, directory=str(self.frontend_dir), **kwargs)
     
     def do_GET(self):
@@ -97,11 +99,48 @@ class ZavionFrontendHandler(http.server.SimpleHTTPRequestHandler):
         return None
     
     def end_headers(self):
-        # Add CORS headers to allow API calls
-        self.send_header('Access-Control-Allow-Origin', '*')
-        self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+        # Add narrowly scoped CORS headers
+        origin = self._select_origin()
+        if origin:
+            self.send_header('Access-Control-Allow-Origin', origin)
+        self.send_header('Access-Control-Allow-Methods', 'GET, OPTIONS')
         self.send_header('Access-Control-Allow-Headers', 'Content-Type')
         super().end_headers()
+
+    def list_directory(self, path):
+        """Disable directory listing to avoid leaking files."""
+        self.send_error(403, "Directory listing not permitted")
+        return None
+
+    def send_head(self):
+        """Block hidden files (dotfiles) before delegating."""
+        if self._is_hidden_path(self.path):
+            self.send_error(403, "Access denied")
+            return None
+        return super().send_head()
+
+    def _is_hidden_path(self, url_path: str) -> bool:
+        """Check if request targets dotfiles or hidden paths."""
+        try:
+            parsed_path = Path(urlparse(url_path).path)
+        except Exception:
+            return True
+        return any(part.startswith(".") for part in parsed_path.parts if part)
+
+    def _parse_allowed_origins(self) -> List[str]:
+        """Parse allowed origins from env (FRONTEND_ALLOWED_ORIGINS)."""
+        raw = os.getenv("FRONTEND_ALLOWED_ORIGINS")
+        if raw:
+            return [item.strip() for item in raw.split(",") if item.strip()]
+        # Default to same-host usage
+        return []
+
+    def _select_origin(self) -> str:
+        """Pick a single allowed origin for CORS header."""
+        if not self.allowed_origins:
+            return ""
+        # Always return first configured origin
+        return self.allowed_origins[0]
 
 def serve_frontend(port=3000, host='localhost'):
     """Start the frontend server."""

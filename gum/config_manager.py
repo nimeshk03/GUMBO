@@ -9,6 +9,7 @@ from local JSON files instead of environment variables.
 import json
 import os
 import logging
+import stat
 from pathlib import Path
 from typing import Dict, Any, Optional
 from datetime import datetime
@@ -88,6 +89,7 @@ class ConfigManager:
         config["updated_at"] = datetime.now().isoformat()
         with open(self.config_file, 'w') as f:
             json.dump(config, f, indent=2)
+        self._ensure_secure_permissions(self.config_file)
     
     def _load_users(self) -> Dict[str, Any]:
         """Load users from file."""
@@ -110,6 +112,20 @@ class ConfigManager:
             users = self._load_users()
         with open(self.users_file, 'w') as f:
             json.dump(users, f, indent=2)
+        self._ensure_secure_permissions(self.users_file)
+
+    def _ensure_secure_permissions(self, path: Path) -> None:
+        """Restrict file permissions to owner read/write only."""
+        try:
+            current_mode = path.stat().st_mode
+            desired_mode = stat.S_IRUSR | stat.S_IWUSR
+            if current_mode & (stat.S_IRWXG | stat.S_IRWXO):
+                logging.warning(f"Tightening permissions on sensitive file: {path}")
+                os.chmod(path, desired_mode)
+        except FileNotFoundError:
+            return
+        except Exception as e:
+            logging.warning(f"Could not adjust permissions for {path}: {e}")
     
     def get_api_key(self, key_name: str) -> Optional[str]:
         """Get an API key by name.
