@@ -1,6 +1,6 @@
-# Zavion Frontend Integration Guide
+# Gumbo Frontend Integration Guide
 
-This guide explains how to integrate the monitoring control JavaScript snippet seamlessly with your existing zavion.app frontend.
+This guide explains how to integrate the monitoring control JavaScript snippet seamlessly with your existing gumbo.app frontend.
 
 ## 🚀 Quick Start
 
@@ -30,7 +30,7 @@ Add these lines to your `index.html`:
 <script src="static/js/monitoring-control.js?v=1"></script>
 ```
 
-### 3. Deploy to zavion.app
+### 3. Deploy to gumbo.app
 
 The monitoring control will automatically appear on your hosted site and integrate seamlessly with your existing UI.
 
@@ -47,7 +47,7 @@ The monitoring control will automatically appear on your hosted site and integra
 
 ### Functionality
 
-- **Automatic Detection**: Only loads on `zavion.app` domain
+- **Automatic Detection**: Only loads on `gumbo.app` domain
 - **Connection Monitoring**: Checks local backend every 30 seconds
 - **Status Polling**: Updates monitoring status every 10 seconds
 - **Error Handling**: Graceful fallbacks for connection issues
@@ -60,10 +60,10 @@ The monitoring control will automatically appear on your hosted site and integra
 The script automatically detects if it's running on the hosted domain:
 
 ```javascript
-if (window.location.hostname === 'zavion.app' || 
-    window.location.hostname === 'www.zavion.app') {
+if (window.location.hostname === 'gumbo.app' || 
+    window.location.hostname === 'www.gumbo.app') {
     // Initialize monitoring control
-    window.zavionMonitoring = new ZavionMonitoringControl();
+    window.gumboMonitoring = new GumboMonitoringControl();
 }
 ```
 
@@ -137,10 +137,10 @@ Follows your existing responsive patterns:
 ### Class Structure
 
 ```javascript
-class ZavionMonitoringControl {
+class GumboMonitoringControl {
     constructor() {
         this.localBackendUrl = 'http://localhost:8001';
-        this.hostedDomain = 'https://zavion.app';
+        this.hostedDomain = 'https://gumbo.app';
         this.pollingInterval = 10000; // 10 seconds
         // ... other properties
     }
@@ -210,7 +210,7 @@ async checkConnection() {
 ## 🚦 User Experience Flow
 
 ### 1. Initial Load
-- User visits `https://zavion.app`
+- User visits `https://gumbo.app`
 - Monitoring control appears in Home tab
 - Connection status shows "Checking..."
 
@@ -277,8 +277,8 @@ The monitoring control is exposed globally for debugging:
 
 ```javascript
 // In browser console
-window.zavionMonitoring // Access the monitoring instance
-window.zavionMonitoringControl // Alternative access
+window.gumboMonitoring // Access the monitoring instance
+window.gumboMonitoringControl // Alternative access
 ```
 
 ### Logging
@@ -286,7 +286,7 @@ window.zavionMonitoringControl // Alternative access
 Comprehensive logging for troubleshooting:
 
 ```javascript
-console.log('Zavion Monitoring Control initialized');
+console.log('Gumbo Monitoring Control initialized');
 console.log('Started monitoring status polling');
 console.log('Connection check timed out');
 console.log('CORS or connection error - local backend not reachable');
@@ -328,7 +328,7 @@ The monitoring control is fully responsive:
 
 - **Local Only**: Only communicates with localhost:8001
 - **No Authentication**: Relies on local network security
-- **CORS Required**: Backend must allow `zavion.app` origin
+- **CORS Required**: Backend must allow `gumbo.app` origin
 - **HTTPS to HTTP**: Secure site to local backend communication
 
 ## 🚀 Deployment Checklist
@@ -336,14 +336,14 @@ The monitoring control is fully responsive:
 - [ ] Upload `monitoring-control.css` to `frontend/static/css/`
 - [ ] Upload `monitoring-control.js` to `frontend/static/js/`
 - [ ] Update `index.html` to include both files
-- [ ] Deploy to `zavion.app`
+- [ ] Deploy to `gumbo.app`
 - [ ] Test connection to local backend
 - [ ] Verify monitoring start/stop functionality
 - [ ] Check responsive design on mobile devices
 
 ## 🎉 Result
 
-After integration, your zavion.app users will see a professional monitoring control panel that:
+After integration, your gumbo.app users will see a professional monitoring control panel that:
 
 - ✅ Seamlessly integrates with your existing design
 - ✅ Provides real-time local monitoring control

@@ -1,16 +1,16 @@
 /**
- * Zavion AI Assistant - Production Grade Chat Interface
+ * Gumbo AI Assistant - Production Grade Chat Interface
  * Integrates with GUM behavioral data for personalized insights
  */
 
-class ZavionChat {
+class GumboChat {
     constructor() {
         this.apiBaseUrl = window.GUM_CONFIG?.apiBaseUrl || 'http://localhost:8000';
         this.messages = [];
         this.isTyping = false;
         this.chatHistory = [];
         this.maxHistory = 50;
-        
+
         this.init();
     }
 
@@ -33,7 +33,7 @@ class ZavionChat {
                     this.sendMessage();
                 }
             });
-            
+
             // Auto-resize textarea
             chatInput.addEventListener('input', () => {
                 chatInput.style.height = 'auto';
@@ -57,7 +57,7 @@ class ZavionChat {
     addWelcomeMessage() {
         const welcomeMessage = {
             type: 'assistant',
-            content: `Hi! I'm your Zavion AI assistant. I've been learning about your behavior patterns and can help you understand your productivity, workflow, and habits. 
+            content: `Hi! I'm your Gumbo AI assistant. I've been learning about your behavior patterns and can help you understand your productivity, workflow, and habits. 
 
 Try asking me:
 • "When am I most productive?"
@@ -72,9 +72,9 @@ Try asking me:
     async sendMessage() {
         const input = document.getElementById('chatInput');
         const sendBtn = document.getElementById('sendChatBtn');
-        
+
         if (!input || this.isTyping) return;
-        
+
         const message = input.value.trim();
         if (!message) return;
 
@@ -85,7 +85,7 @@ Try asking me:
             timestamp: new Date()
         };
         this.addMessage(userMessage);
-        
+
         // Clear input and disable
         input.value = '';
         input.disabled = true;
@@ -95,10 +95,10 @@ Try asking me:
         try {
             // Get behavioral context first
             const context = await this.getBehavioralContext(message);
-            
+
             // Send to AI for response
             const response = await this.getAIResponse(message, context);
-            
+
             // Add AI response
             const aiMessage = {
                 type: 'assistant',
@@ -106,7 +106,7 @@ Try asking me:
                 timestamp: new Date()
             };
             this.addMessage(aiMessage);
-            
+
         } catch (error) {
             console.error('Chat error:', error);
             const errorMessage = {
@@ -177,7 +177,7 @@ Try asking me:
                 body: JSON.stringify({
                     content: `User Query: ${message}\n\nBehavioral Context:\n${context}\n\nPlease provide a helpful, personalized response based on the user's behavioral data. Be conversational and actionable.`,
                     user_name: 'Arnav Sharma',
-                    observer_name: 'zavion_chat'
+                    observer_name: 'gumbo_chat'
                 })
             });
 
@@ -196,12 +196,12 @@ Try asking me:
     addMessage(message) {
         this.messages.push(message);
         this.chatHistory.push(message);
-        
+
         // Keep history manageable
         if (this.chatHistory.length > this.maxHistory) {
             this.chatHistory.shift();
         }
-        
+
         this.saveChatHistory();
         this.renderMessage(message);
     }
@@ -212,10 +212,10 @@ Try asking me:
 
         const messageDiv = document.createElement('div');
         messageDiv.className = `chat-message ${message.type}-message`;
-        
-        const timestamp = message.timestamp.toLocaleTimeString([], { 
-            hour: '2-digit', 
-            minute: '2-digit' 
+
+        const timestamp = message.timestamp.toLocaleTimeString([], {
+            hour: '2-digit',
+            minute: '2-digit'
         });
 
         messageDiv.innerHTML = `
@@ -235,7 +235,7 @@ Try asking me:
 
     saveChatHistory() {
         try {
-            localStorage.setItem('zavion_chat_history', JSON.stringify(this.chatHistory));
+            localStorage.setItem('gumbo_chat_history', JSON.stringify(this.chatHistory));
         } catch (error) {
             console.warn('Could not save chat history:', error);
         }
@@ -243,7 +243,7 @@ Try asking me:
 
     loadChatHistory() {
         try {
-            const saved = localStorage.getItem('zavion_chat_history');
+            const saved = localStorage.getItem('gumbo_chat_history');
             if (saved) {
                 this.chatHistory = JSON.parse(saved);
                 // Convert timestamp strings back to Date objects
@@ -259,13 +259,13 @@ Try asking me:
     clearHistory() {
         this.chatHistory = [];
         this.messages = [];
-        localStorage.removeItem('zavion_chat_history');
-        
+        localStorage.removeItem('gumbo_chat_history');
+
         const container = document.getElementById('chatMessages');
         if (container) {
             container.innerHTML = '';
         }
-        
+
         this.addWelcomeMessage();
     }
 
@@ -280,5 +280,5 @@ Try asking me:
 
 // Initialize chat when DOM is ready
 document.addEventListener('DOMContentLoaded', () => {
-    window.zavionChat = new ZavionChat();
+    window.gumboChat = new GumboChat();
 }); 

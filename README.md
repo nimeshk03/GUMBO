@@ -1,6 +1,6 @@
-# Zavion (GUM)
+# Gumbo (GUM)
 
-**General User Models (GUM)** learn about you by observing your interactions with your computer. Zavion uses this architecture to infer new propositions about a user from multimodal observations, retrieve related context, and continuously revise its understanding.
+**General User Models (GUM)** learn about you by observing your interactions with your computer. Gumbo uses this architecture to infer new propositions about a user from multimodal observations, retrieve related context, and continuously revise its understanding.
 
 ## Features
 - **Multimodal Learning**: Captures and processes text and visual data (screenshots) to understand user context.
@@ -17,8 +17,8 @@
 ### Setup
 1. **Clone the repository**:
    ```bash
-   git clone https://github.com/ArnavS-22/zavionapp.git
-   cd zavionapp
+   git clone https://github.com/ArnavS-22/gumboapp.git
+   cd gumboapp
    ```
 
 2. **Install dependencies**:

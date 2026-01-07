@@ -1,5 +1,5 @@
 @echo off
-echo Zavion GUM Setup Wizard
+echo Gumbo GUM Setup Wizard
 echo =======================
 echo.
 echo This will help you configure your API keys and settings.

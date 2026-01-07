@@ -1,6 +1,6 @@
 # React Component Integration Setup
 
-This document explains how to set up and use React components in the existing Zavion frontend application.
+This document explains how to set up and use React components in the existing Gumbo frontend application.
 
 ## Prerequisites
 

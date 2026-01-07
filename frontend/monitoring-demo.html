@@ -1,9 +1,10 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Zavion Monitoring Control Demo</title>
+    <title>Gumbo Monitoring Control Demo</title>
     <link rel="stylesheet" href="static/css/styles.css?v=9">
     <link rel="stylesheet" href="static/css/monitoring-control.css?v=1">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
@@ -15,7 +16,7 @@
             min-height: 100vh;
             padding: 2rem;
         }
-        
+
         .demo-container {
             max-width: 800px;
             margin: 0 auto;
@@ -24,23 +25,23 @@
             padding: 2rem;
             box-shadow: var(--shadow-2xl);
         }
-        
+
         .demo-header {
             text-align: center;
             margin-bottom: 2rem;
         }
-        
+
         .demo-header h1 {
             color: var(--text-primary);
             font-size: 2.5rem;
             margin-bottom: 0.5rem;
         }
-        
+
         .demo-header p {
             color: var(--text-secondary);
             font-size: 1.1rem;
         }
-        
+
         .demo-info {
             background: var(--bg-secondary);
             border-radius: var(--border-radius);
@@ -48,7 +49,7 @@
             margin-bottom: 2rem;
             border-left: 4px solid var(--brand-primary);
         }
-        
+
         .demo-info h3 {
             color: var(--text-primary);
             margin-bottom: 1rem;
@@ -56,18 +57,18 @@
             align-items: center;
             gap: 0.5rem;
         }
-        
+
         .demo-info ul {
             color: var(--text-secondary);
             line-height: 1.6;
             margin: 0;
             padding-left: 1.5rem;
         }
-        
+
         .demo-info li {
             margin-bottom: 0.5rem;
         }
-        
+
         .demo-note {
             background: rgba(var(--warning-rgb), 0.1);
             border: 1px solid rgba(var(--warning-rgb), 0.2);
@@ -76,11 +77,11 @@
             margin-bottom: 2rem;
             color: var(--warning-color);
         }
-        
+
         .demo-note i {
             margin-right: 0.5rem;
         }
-        
+
         .theme-toggle {
             position: fixed;
             top: 2rem;
@@ -97,18 +98,19 @@
             box-shadow: var(--shadow-lg);
             transition: all var(--transition-base);
         }
-        
+
         .theme-toggle:hover {
             transform: scale(1.1);
             box-shadow: var(--shadow-xl);
         }
-        
+
         .theme-toggle i {
             color: var(--text-primary);
             font-size: 1.2rem;
         }
     </style>
 </head>
+
 <body>
     <!-- Theme Toggle -->
     <button class="theme-toggle" onclick="toggleTheme()" title="Toggle theme">
@@ -117,10 +119,10 @@
 
     <div class="demo-container">
         <div class="demo-header">
-            <h1>🔍 Zavion Monitoring Control</h1>
+            <h1>🔍 Gumbo Monitoring Control</h1>
             <p>Demo of the integrated monitoring control interface</p>
         </div>
-        
+
         <div class="demo-info">
             <h3>
                 <i class="fas fa-info-circle"></i>
@@ -134,15 +136,16 @@
                 <li><strong>Error Handling:</strong> Graceful fallbacks and user-friendly messages</li>
             </ul>
         </div>
-        
+
         <div class="demo-note">
             <i class="fas fa-exclamation-triangle"></i>
-            <strong>Note:</strong> This is a visual demo. The monitoring control will only function when deployed to zavion.app and connected to a local backend.
+            <strong>Note:</strong> This is a visual demo. The monitoring control will only function when deployed to
+            gumbo.app and connected to a local backend.
         </div>
-        
+
         <!-- The monitoring control will be inserted here -->
         <div id="monitoring-demo-placeholder"></div>
-        
+
         <div class="demo-info">
             <h3>
                 <i class="fas fa-code"></i>
@@ -151,7 +154,7 @@
             <ul>
                 <li><strong>Files Added:</strong> monitoring-control.css and monitoring-control.js</li>
                 <li><strong>HTML Changes:</strong> Two lines added to index.html</li>
-                <strong>Automatic:</strong> Only loads on zavion.app domain</li>
+                <strong>Automatic:</strong> Only loads on gumbo.app domain</li>
                 <li><strong>Seamless:</strong> Integrates without modifying existing code</li>
                 <li><strong>Performance:</strong> Lightweight and efficient</li>
             </ul>
@@ -161,25 +164,25 @@
     <script>
         // Theme management (copied from your existing app)
         let theme = localStorage.getItem('gum-theme') || 'light';
-        
+
         function toggleTheme() {
             theme = theme === 'light' ? 'dark' : 'light';
             localStorage.setItem('gum-theme', theme);
             document.documentElement.setAttribute('data-theme', theme);
-            
+
             const icon = document.querySelector('.theme-toggle i');
             icon.className = theme === 'light' ? 'fas fa-moon' : 'fas fa-sun';
         }
-        
+
         // Apply initial theme
         document.documentElement.setAttribute('data-theme', theme);
         const icon = document.querySelector('.theme-toggle i');
         icon.className = theme === 'light' ? 'fas fa-moon' : 'fas fa-sun';
-        
+
         // Simulate the monitoring control for demo purposes
         function createDemoMonitoringControl() {
             const placeholder = document.getElementById('monitoring-demo-placeholder');
-            
+
             // Create a mock monitoring control container
             const mockContainer = document.createElement('div');
             mockContainer.className = 'monitoring-control-container';
@@ -245,12 +248,13 @@
                     </div>
                 </div>
             `;
-            
+
             placeholder.appendChild(mockContainer);
         }
-        
+
         // Create demo when page loads
         document.addEventListener('DOMContentLoaded', createDemoMonitoringControl);
     </script>
 </body>
+
 </html>

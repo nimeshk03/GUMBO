@@ -1,14 +1,14 @@
 /**
- * Zavion - Frontend Application
+ * Gumbo - Frontend Application
  * Modern JavaScript application for video analysis and user behavior insights
  */
 
-class ZavionApp {
+class GumboApp {
     constructor() {
         // Use configuration from injected global variable or fallback to default
-        this.apiBaseUrl = window.ZAVION_CONFIG?.apiBaseUrl || 'http://localhost:8000';
-        console.log('Zavion Frontend initialized with API base URL:', this.apiBaseUrl);
-        
+        this.apiBaseUrl = window.GUMBO_CONFIG?.apiBaseUrl || 'http://localhost:8000';
+        console.log('Gumbo Frontend initialized with API base URL:', this.apiBaseUrl);
+
         this.connectionStatus = 'connecting';
         this.uploadProgress = 0;
         this.currentStep = 1;
@@ -16,10 +16,10 @@ class ZavionApp {
         this.toastTimeout = null;
         this.rateLimitInfo = {}; // Add rate limit tracking
         this.rateLimitTimers = {}; // Track countdown timers
-        
+
         // Propositions pagination
         this.currentPropositionsPage = 1;
-        
+
         // Tab management
         this.activeTab = 'home';
         // Theme management - handle migration from old theme key
@@ -30,30 +30,30 @@ class ZavionApp {
             localStorage.setItem('gum-theme', theme);
         }
         this.theme = theme;
-        
+
         // Text shimmer management
         this.textShimmerInstances = new Map();
-        
+
         // Suggestion chat system
         this.activeSuggestionChats = {};
         this.currentChatId = null;
         this.currentSuggestionBatch = null;
-        
+
         this.init();
     }
 
     async apiCall(url, options = {}) {
         try {
             const response = await fetch(url, options);
-            
+
             if (response.status === 429) {
                 const retryAfter = response.headers.get('Retry-After');
                 const rateLimitLimit = response.headers.get('X-RateLimit-Limit');
                 const rateLimitRemaining = response.headers.get('X-RateLimit-Remaining');
                 const rateLimitReset = response.headers.get('X-RateLimit-Reset');
-                
+
                 const errorData = await response.json();
-                
+
                 this.handleRateLimit(url, retryAfter, errorData.detail, {
                     limit: rateLimitLimit,
                     remaining: rateLimitRemaining,
@@ -61,15 +61,15 @@ class ZavionApp {
                 });
                 throw new Error('Rate limited');
             }
-            
+
             // Clear any rate limit info on success
             delete this.rateLimitInfo[url];
             this.updateRateLimitUI();
-            
+
             return response;
         } catch (error) {
             if (error.message !== 'Rate limited') {
-                this.showToast('❌ Connection error. Make sure Zavion is running.', 'error');
+                this.showToast('❌ Connection error. Make sure Gumbo is running.', 'error');
             }
             throw error;
         }
@@ -78,7 +78,7 @@ class ZavionApp {
     handleRateLimit(endpoint, retryAfter, message, headers = {}) {
         const waitTime = parseInt(retryAfter) || 60;
         const resetTime = Date.now() + (waitTime * 1000);
-        
+
         this.rateLimitInfo[endpoint] = {
             resetTime: resetTime,
             message: message,
@@ -86,13 +86,13 @@ class ZavionApp {
             remaining: headers.remaining,
             reset: headers.reset
         };
-        
+
         this.showToast(`⏳ ${message}`, 'warning', waitTime * 1000);
         this.updateRateLimitUI();
-        
+
         // Start countdown timer
         this.startRateLimitCountdown(endpoint, resetTime);
-        
+
         // Auto-clear after wait time
         setTimeout(() => {
             delete this.rateLimitInfo[endpoint];
@@ -105,11 +105,11 @@ class ZavionApp {
         if (this.rateLimitTimers[endpoint]) {
             clearInterval(this.rateLimitTimers[endpoint]);
         }
-        
+
         // Start new countdown timer
         this.rateLimitTimers[endpoint] = setInterval(() => {
             const remainingTime = Math.ceil((resetTime - Date.now()) / 1000);
-            
+
             if (remainingTime <= 0) {
                 // Time's up, clear timer and re-enable
                 clearInterval(this.rateLimitTimers[endpoint]);
@@ -127,13 +127,13 @@ class ZavionApp {
     updateRateLimitUI() {
         // Update video upload button
         this.updateEndpointRateLimitUI('/observations/video', 'uploadBtn', 'Upload Video');
-        
+
         // Update text submission button
         this.updateEndpointRateLimitUI('/observations/text', 'submitTextBtn', 'Submit Text');
-        
+
         // Update query button
         this.updateEndpointRateLimitUI('/query', 'querySearchBtn', 'Search');
-        
+
         // Update propositions load button
         this.updateEndpointRateLimitUI('/propositions', 'loadPropositions', 'Load Insights');
     }
@@ -142,15 +142,15 @@ class ZavionApp {
         const fullEndpoint = `${this.apiBaseUrl}${endpoint}`;
         const rateLimitInfo = this.rateLimitInfo[fullEndpoint];
         const button = document.getElementById(buttonId);
-        
+
         if (rateLimitInfo && button) {
             const remainingTime = Math.ceil((rateLimitInfo.resetTime - Date.now()) / 1000);
-            
+
             if (remainingTime > 0) {
                 button.disabled = true;
                 button.textContent = `Wait ${remainingTime}s`;
                 button.classList.add('rate-limited');
-                
+
                 // Add visual indicator
                 this.addRateLimitIndicator(button, remainingTime, rateLimitInfo.limit, rateLimitInfo.remaining);
             } else {
@@ -170,7 +170,7 @@ class ZavionApp {
     addRateLimitIndicator(button, remainingTime, limit, remaining) {
         // Remove existing indicator
         this.removeRateLimitIndicator(button);
-        
+
         // Create indicator element
         const indicator = document.createElement('div');
         indicator.className = 'rate-limit-indicator';
@@ -182,7 +182,7 @@ class ZavionApp {
                 ${remaining || 0}/${limit || '∞'} remaining • ${remainingTime}s
             </div>
         `;
-        
+
         // Insert after button
         button.parentNode.insertBefore(indicator, button.nextSibling);
     }
@@ -217,7 +217,7 @@ class ZavionApp {
         this.setupSuggestionsListeners();
         await this.checkConnection();
         this.updateConnectionStatus();
-        
+
         // Initialize date inputs with today's date
         const today = new Date().toISOString().split('T')[0];
         document.getElementById('timelineDate').value = today;
@@ -333,17 +333,17 @@ class ZavionApp {
         while (true) {
             try {
                 const response = await fetch(`${this.apiBaseUrl}/observations/video/status/${jobId}`);
-                
+
                 if (response.ok) {
                     const status = await response.json();
-                    
+
                     // Update progress based on status
                     if (status.status === 'processing' || status.status === 'processing_frames') {
                         this.updateProgressStep(2, status.progress || 0);
                     } else if (status.status === 'analyzing') {
                         this.updateProgressStep(3, status.progress || 0);
                     }
-                      if (status.status === 'completed') {
+                    if (status.status === 'completed') {
                         // Processing complete - now fetch insights
                         this.updateProgressStep(3, 100);
                         try {
@@ -351,14 +351,14 @@ class ZavionApp {
                             let insights = [];
                             let patterns = [];
                             let summary = '';
-                            
+
                             if (insightsResponse.ok) {
                                 const insightsData = await insightsResponse.json();
                                 insights = insightsData.key_insights || [];
                                 patterns = insightsData.behavior_patterns || [];
                                 summary = insightsData.summary || '';
                             }
-                            
+
                             return {
                                 success: true,
                                 frames_analyzed: status.total_frames || 0,
@@ -387,10 +387,10 @@ class ZavionApp {
                 } else {
                     throw new Error(`Status check failed: ${response.status}`);
                 }
-                
+
                 // Wait before next poll
                 await this.delay(2000);
-                
+
             } catch (error) {
                 throw new Error(`Status polling failed: ${error.message}`);
             }
@@ -403,19 +403,19 @@ class ZavionApp {
     displayResults(results) {
         const resultsSection = document.getElementById('resultsSection');
         const resultsContent = document.getElementById('resultsContent');
-        
+
         if (!resultsSection || !resultsContent) return;
 
         // Show results section
         resultsSection.style.display = 'block';
-        
+
         // Create results HTML
         const resultsHtml = this.generateResultsHTML(results);
         resultsContent.innerHTML = resultsHtml;
-        
+
         // Scroll to results
         resultsSection.scrollIntoView({ behavior: 'smooth' });
-        
+
         // Store results for export
         this.currentResults = results;
     }
@@ -489,7 +489,7 @@ class ZavionApp {
         if (!insights.length) {
             return '<p class="no-data">No insights available</p>';
         }
-        
+
         return insights.map(insight => `
             <div class="insight-item">
                 <div class="insight-icon">
@@ -505,7 +505,7 @@ class ZavionApp {
         if (!patterns.length) {
             return '<p class="no-data">No patterns identified</p>';
         }
-        
+
         return patterns.map(pattern => {
             // Handle both string patterns and object patterns
             if (typeof pattern === 'string') {
@@ -580,7 +580,7 @@ class ZavionApp {
             }
 
             const result = await response.json();
-            
+
             // Show success message with deletion counts
             const message = `Database cleaned successfully!\n\n` +
                 `Deleted:\n` +
@@ -590,20 +590,20 @@ class ZavionApp {
                 `• FTS indexes cleared`;
 
             this.showToast('Database cleaned successfully!', 'success');
-            
+
             // Optional: Show detailed results in an alert
             alert(message);
-            
+
             // Refresh any displayed data
             this.loadRecentHistory();
-            
+
             // Reset any current results
             this.currentResults = null;
             const resultsSection = document.getElementById('resultsSection');
             if (resultsSection) {
                 resultsSection.style.display = 'none';
             }
-            
+
         } catch (error) {
             console.error('Database cleanup failed:', error);
             this.showToast(`Database cleanup failed: ${error.message}`, 'error');
@@ -646,7 +646,7 @@ class ZavionApp {
             const inputs = form.querySelectorAll('input, button, select');
             inputs.forEach(input => input.disabled = false);
         }
-        
+
         // Keep upload button disabled if no file selected
         if (!this.selectedFile) {
             this.disableUploadButton();
@@ -663,7 +663,7 @@ class ZavionApp {
             const response = await fetch(`${this.apiBaseUrl}/health`, {
                 timeout: 5000
             });
-            
+
             if (response.ok) {
                 const health = await response.json();
                 this.connectionStatus = health.gum_connected ? 'connected' : 'disconnected';
@@ -684,7 +684,7 @@ class ZavionApp {
 
         const statusText = {
             'connected': 'Connected',
-            'disconnected': 'Disconnected', 
+            'disconnected': 'Disconnected',
             'connecting': 'Connecting...'
         };
 
@@ -734,7 +734,7 @@ class ZavionApp {
             <i class="${icons[type] || icons.info}" aria-hidden="true"></i>
             <span>${message}</span>
         `;
-        
+
         toast.className = `toast ${type} show`;
 
         // Auto hide after 6 seconds (longer for better readability)
@@ -748,11 +748,11 @@ class ZavionApp {
      */
     formatFileSize(bytes) {
         if (bytes === 0) return '0 Bytes';
-        
+
         const k = 1024;
         const sizes = ['Bytes', 'KB', 'MB', 'GB'];
         const i = Math.floor(Math.log(bytes) / Math.log(k));
-        
+
         return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
     }
 
@@ -763,7 +763,7 @@ class ZavionApp {
         const hours = Math.floor(seconds / 3600);
         const minutes = Math.floor((seconds % 3600) / 60);
         const secs = Math.floor(seconds % 60);
-        
+
         if (hours > 0) {
             return `${hours}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
         } else {
@@ -879,7 +879,7 @@ class ZavionApp {
 
         // Create shimmer element
         const shimmerElement = this.createTextShimmer(loadingText, options);
-        
+
         // Clear and add shimmer
         element.innerHTML = '';
         element.appendChild(shimmerElement);
@@ -905,10 +905,10 @@ class ZavionApp {
         if (!instance) return;
 
         const { element, originalContent } = instance;
-        
+
         // Restore original content
         element.innerHTML = originalContent;
-        
+
         // Clean up
         this.textShimmerInstances.delete(instanceId);
     }
@@ -937,9 +937,9 @@ class ZavionApp {
             ...options,
             className: 'btn-shimmer'
         };
-        
+
         const shimmerElement = this.createTextShimmer(loadingText, shimmerOptions);
-        
+
         // Clear and add shimmer
         buttonElement.innerHTML = '';
         buttonElement.appendChild(shimmerElement);
@@ -966,12 +966,12 @@ class ZavionApp {
         if (!instance || instance.type !== 'button') return;
 
         const { element, originalText, originalDisabled } = instance;
-        
+
         // Restore original state
         element.textContent = originalText;
         element.disabled = originalDisabled;
         element.classList.remove('loading');
-        
+
         // Clean up
         this.textShimmerInstances.delete(instanceId);
     }
@@ -989,7 +989,7 @@ class ZavionApp {
 
         // Store original content
         const originalContent = element.innerHTML;
-        
+
         // Add loading class
         element.classList.add('card-loading');
 
@@ -1042,11 +1042,11 @@ class ZavionApp {
         if (!instance || instance.type !== 'card') return;
 
         const { element, originalContent } = instance;
-        
+
         // Restore original content
         element.innerHTML = originalContent;
         element.classList.remove('card-loading');
-        
+
         // Clean up
         this.textShimmerInstances.delete(instanceId);
     }
@@ -1147,7 +1147,7 @@ class ZavionApp {
 
             // Fetch propositions
             const response = await fetch(`${this.apiBaseUrl}/propositions?${params}`);
-            
+
             if (!response.ok) {
                 throw new Error(`HTTP ${response.status}: ${response.statusText}`);
             }
@@ -1218,7 +1218,7 @@ class ZavionApp {
             return;
         }
 
-        contentContainer.innerHTML = propositions.map((prop, index) => 
+        contentContainer.innerHTML = propositions.map((prop, index) =>
             this.createPropositionCard(prop, index)
         ).join('');
     }
@@ -1230,10 +1230,10 @@ class ZavionApp {
         const confidence = proposition.confidence;
         const confidenceClass = this.getConfidenceClass(confidence);
         const confidenceLabel = this.getConfidenceLabel(confidence);
-        
+
         const createdDate = new Date(proposition.created_at);
-        const formattedDate = createdDate.toLocaleDateString() + ' ' + 
-                            this.formatLocalTime(proposition.created_at);
+        const formattedDate = createdDate.toLocaleDateString() + ' ' +
+            this.formatLocalTime(proposition.created_at);
 
         return `
             <div class="proposition-card" style="animation-delay: ${index * 0.1}s">
@@ -1291,7 +1291,7 @@ class ZavionApp {
     displayEmptyPropositions() {
         const contentContainer = document.getElementById('propositionsContent');
         const statsContainer = document.getElementById('propositionsStats');
-        
+
         if (statsContainer) {
             statsContainer.style.display = 'none';
         }
@@ -1321,7 +1321,7 @@ class ZavionApp {
         // Show pagination if we have results
         if (resultCount > 0) {
             paginationContainer.style.display = 'flex';
-            
+
             // Update page info
             if (pageInfo) {
                 pageInfo.textContent = `Page ${this.currentPropositionsPage}`;
@@ -1356,7 +1356,7 @@ class ZavionApp {
      */
     setupTabNavigation() {
         const tabButtons = document.querySelectorAll('.tab-button');
-        
+
         tabButtons.forEach(button => {
             button.addEventListener('click', (e) => {
                 const tabId = button.getAttribute('data-tab');
@@ -1385,7 +1385,7 @@ class ZavionApp {
         if (this.activeTab === 'suggestions') {
             this.stopSuggestionPolling();
         }
-        
+
         // Hide all tab panels
         const tabPanels = document.querySelectorAll('.tab-panel');
         tabPanels.forEach(panel => {
@@ -1523,7 +1523,7 @@ class ZavionApp {
 
             // Fetch timeline data
             const response = await fetch(`${this.apiBaseUrl}/propositions/by-hour?${params}`);
-            
+
             if (!response.ok) {
                 throw new Error(`HTTP ${response.status}: ${response.statusText}`);
             }
@@ -1569,7 +1569,7 @@ class ZavionApp {
             const [year, month, day] = timelineData.date.split('-').map(Number);
             // Create date using UTC to avoid timezone conversion issues
             const localDate = new Date(Date.UTC(year, month - 1, day, 12, 0, 0)); // month is 0-indexed, noon UTC
-            
+
             displayDate = localDate.toLocaleDateString('en-US', {
                 weekday: 'long',
                 year: 'numeric',
@@ -1599,9 +1599,9 @@ class ZavionApp {
                 </div>
             </div>
             <div class="timeline-hours">
-                ${timelineData.hourly_groups.map((hourGroup, index) => 
-                    this.createTimelineHourItem(hourGroup, index)
-                ).join('')}
+                ${timelineData.hourly_groups.map((hourGroup, index) =>
+            this.createTimelineHourItem(hourGroup, index)
+        ).join('')}
             </div>
         `;
 
@@ -1639,8 +1639,8 @@ class ZavionApp {
                     <div class="timeline-propositions">
                         <strong>Individual Insights:</strong>
                         ${propositions.map(prop => {
-                            const timeLabel = prop?.created_at ? this.formatLocalTime(prop.created_at) : 'Unknown time';
-                            return `
+            const timeLabel = prop?.created_at ? this.formatLocalTime(prop.created_at) : 'Unknown time';
+            return `
                                 <div class="timeline-proposition">
                                     <span class="timeline-proposition-time">${timeLabel}</span>
                                     <div class="timeline-proposition-text">
@@ -1648,7 +1648,7 @@ class ZavionApp {
                                     </div>
                                 </div>
                             `;
-                        }).join('')}
+        }).join('')}
                     </div>
                 </div>
             </div>
@@ -1668,7 +1668,7 @@ class ZavionApp {
                 if (e.target.classList.contains('timeline-hour-button')) {
                     return;
                 }
-                
+
                 const hour = item.getAttribute('data-hour');
                 this.toggleTimelineHourDetails(hour);
             });
@@ -1689,11 +1689,11 @@ class ZavionApp {
     toggleTimelineHourDetails(hour) {
         const detailsElement = document.getElementById(`timeline-hour-${hour}`);
         const button = document.querySelector(`[data-hour="${hour}"].timeline-hour-button`);
-        
+
         if (!detailsElement) return;
 
         const isVisible = detailsElement.classList.contains('show');
-        
+
         if (isVisible) {
             detailsElement.classList.remove('show');
             if (button) {
@@ -1712,7 +1712,7 @@ class ZavionApp {
      */
     displayEmptyTimeline() {
         const contentContainer = document.getElementById('timelineContent');
-        
+
         if (!contentContainer) return;
 
         contentContainer.innerHTML = `
@@ -1745,7 +1745,7 @@ class ZavionApp {
     setupSuggestionsListeners() {
         // SSE-based suggestion system - no manual generation needed
         // The system automatically generates suggestions when high-confidence insights are detected
-        
+
         // Set up cleanup for polling on page unload
         window.addEventListener('beforeunload', () => {
             this.stopSuggestionPolling();
@@ -1787,7 +1787,7 @@ class ZavionApp {
 
             // Fetch narrative timeline data
             const response = await fetch(`${this.apiBaseUrl}/observations/by-hour?date=${date}`);
-            
+
             if (!response.ok) {
                 throw new Error(`HTTP ${response.status}: ${response.statusText}`);
             }
@@ -1833,7 +1833,7 @@ class ZavionApp {
             const [year, month, day] = timelineData.date.split('-').map(Number);
             // Create date using UTC to avoid timezone conversion issues
             const localDate = new Date(Date.UTC(year, month - 1, day, 12, 0, 0)); // month is 0-indexed, noon UTC
-            
+
             displayDate = localDate.toLocaleDateString('en-US', {
                 weekday: 'long',
                 year: 'numeric',
@@ -1867,9 +1867,9 @@ class ZavionApp {
                 </div>
             </div>
             <div class="narrative-timeline-hours">
-                ${timelineData.hourly_groups.map((hourGroup, index) => 
-                    this.createNarrativeTimelineHourItem(hourGroup, index)
-                ).join('')}
+                ${timelineData.hourly_groups.map((hourGroup, index) =>
+            this.createNarrativeTimelineHourItem(hourGroup, index)
+        ).join('')}
             </div>
         `;
 
@@ -1928,15 +1928,15 @@ class ZavionApp {
         // Extract meaningful content
         const lines = cleaned.split('\n').filter(line => {
             const trimmed = line.trim();
-            return trimmed.length > 0 && 
-                   !trimmed.match(/^[-•\s]*$/) &&
-                   !trimmed.match(/^[A-Z][a-z]+:\s*$/) &&
-                   !trimmed.match(/^\d{2}:\d{2}:\d{2}/) &&
-                   !trimmed.match(/^PS C:/) &&
-                   !trimmed.match(/^INFO:/) &&
-                   !trimmed.match(/^DEBUG:/) &&
-                   !trimmed.match(/^WARNING:/) &&
-                   !trimmed.match(/^ERROR:/);
+            return trimmed.length > 0 &&
+                !trimmed.match(/^[-•\s]*$/) &&
+                !trimmed.match(/^[A-Z][a-z]+:\s*$/) &&
+                !trimmed.match(/^\d{2}:\d{2}:\d{2}/) &&
+                !trimmed.match(/^PS C:/) &&
+                !trimmed.match(/^INFO:/) &&
+                !trimmed.match(/^DEBUG:/) &&
+                !trimmed.match(/^WARNING:/) &&
+                !trimmed.match(/^ERROR:/);
         });
 
         // Join and clean up
@@ -1946,7 +1946,7 @@ class ZavionApp {
         if (cleaned.length > 0) {
             // Extract the most meaningful parts
             const meaningfulParts = [];
-            
+
             // Look for application usage
             const appMatch = content.match(/Application:\s*([^\n]+)/);
             if (appMatch) {
@@ -1997,7 +1997,7 @@ class ZavionApp {
 
         return `
             <div class="narrative-timeline-hour-item" data-hour="${hourGroup.hour}">
-                <div class="narrative-timeline-hour-header" onclick="window.zavionApp?.toggleNarrativeTimelineHourDetails(${hourGroup.hour})">
+                <div class="narrative-timeline-hour-header" onclick="window.gumboApp?.toggleNarrativeTimelineHourDetails(${hourGroup.hour})">
                     <div class="narrative-timeline-hour-info">
                         <h4 class="narrative-timeline-hour-title">
                             <i class="fas fa-clock"></i>
@@ -2037,12 +2037,12 @@ class ZavionApp {
      */
     setupNarrativeTimelineHourHandlers() {
         const hourItems = document.querySelectorAll('.narrative-timeline-hour-item');
-        
+
         hourItems.forEach(item => {
             const hour = item.dataset.hour;
             const details = document.getElementById(`narrative-timeline-hour-${hour}`);
             const toggle = item.querySelector('.narrative-timeline-hour-toggle i');
-            
+
             if (details && toggle) {
                 // Initially hide details
                 details.style.display = 'none';
@@ -2058,10 +2058,10 @@ class ZavionApp {
     toggleNarrativeTimelineHourDetails(hour) {
         const details = document.getElementById(`narrative-timeline-hour-${hour}`);
         const toggle = document.querySelector(`[data-hour="${hour}"] .narrative-timeline-hour-toggle i`);
-        
+
         if (details && toggle) {
             const isVisible = details.style.display !== 'none';
-            
+
             if (isVisible) {
                 details.style.display = 'none';
                 toggle.classList.remove('fa-chevron-up');
@@ -2080,20 +2080,20 @@ class ZavionApp {
     formatLocalTime(dateString) {
         try {
             console.log('🔥🔥🔥 formatLocalTime CALLED with input:', dateString);
-            
+
             // Parse the UTC date string and convert to local time
             const date = new Date(dateString);
-            
+
             console.log('Parsed date object:', date);
             console.log('Date.getTime():', date.getTime());
             console.log('Is valid:', !isNaN(date.getTime()));
-            
+
             // Check if the date is valid
             if (isNaN(date.getTime())) {
                 console.log('Invalid date, returning error');
                 return 'Invalid time';
             }
-            
+
             // If the dateString doesn't have timezone info, assume it's UTC
             // and create a proper UTC date object
             if (!dateString.includes('Z') && !dateString.includes('+')) {
@@ -2111,7 +2111,7 @@ class ZavionApp {
                     return result;
                 }
             }
-            
+
             // Format in local timezone
             const result = date.toLocaleTimeString('en-US', {
                 hour: 'numeric',
@@ -2143,7 +2143,7 @@ class ZavionApp {
      */
     displayEmptyNarrativeTimeline() {
         const contentContainer = document.getElementById('narrativeTimelineContent');
-        
+
         if (!contentContainer) return;
 
         contentContainer.innerHTML = `
@@ -2158,11 +2158,11 @@ class ZavionApp {
     // =============================================================================
     // GUMBO RELIABLE SUGGESTION SYSTEM (HTTP POLLING)
     // =============================================================================
-        
+
     initializeSuggestionStream() {
         const content = document.getElementById('suggestionsContent');
         if (!content) return;
-        
+
         this.updateSuggestionUI('connecting');
         // Replace SSE with HTTP polling
         this.startSuggestionPolling();
@@ -2171,14 +2171,14 @@ class ZavionApp {
     startSuggestionPolling() {
         console.log('🔄 Starting suggestion HTTP polling');
         this.updateSuggestionUI('monitoring');
-        
+
         // Poll for new suggestions every 5 seconds
         this.suggestionPollingInterval = setInterval(() => {
             if (this.activeTab === 'suggestions') {
                 this.checkForNewSuggestions();
             }
         }, 5000);
-        
+
         // Check immediately
         this.checkForNewSuggestions();
     }
@@ -2187,26 +2187,26 @@ class ZavionApp {
         try {
             // Get undelivered suggestions (like how propositions work)
             const response = await fetch(`${this.apiBaseUrl}/suggestions?delivered=false&limit=10`);
-            
+
             if (!response.ok) {
                 throw new Error(`HTTP ${response.status}: ${response.statusText}`);
             }
-            
+
             const data = await response.json();
-            
+
             if (data.suggestions && data.suggestions.length > 0) {
                 console.log(`🎯 Received ${data.suggestions.length} new suggestions via HTTP polling`);
-                
+
                 // Convert to the format expected by displaySuggestionBatch
                 const batch = {
                     suggestions: data.suggestions,
                     generated_at: new Date().toISOString(),
                     batch_id: data.suggestions[0]?.batch_id || 'polling'
                 };
-                
+
                 this.displaySuggestionBatch(batch);
             }
-            
+
         } catch (error) {
             console.error('Error checking for new suggestions:', error);
             // Don't show error UI for polling failures - just log them
@@ -2233,7 +2233,7 @@ class ZavionApp {
 
             // Create new SSE connection
             this.suggestionEventSource = new EventSource(`${this.apiBaseUrl}/suggestions/stream`);
-            
+
             // Connection opened
             this.suggestionEventSource.onopen = () => {
                 console.log('✅ Suggestion stream connected');
@@ -2288,12 +2288,12 @@ class ZavionApp {
             // Connection error
             this.suggestionEventSource.onerror = (event) => {
                 console.error('❌ Suggestion stream connection error:', event);
-                
+
                 if (this.suggestionEventSource.readyState === EventSource.CLOSED) {
                     this.handleSuggestionStreamReconnect();
                 }
             };
-            
+
         } catch (error) {
             console.error('Failed to create suggestion stream:', error);
             this.updateSuggestionUI('error', { message: error.message });
@@ -2318,7 +2318,7 @@ class ZavionApp {
         const delay = baseDelay * Math.pow(2, this.suggestionReconnectAttempts - 1); // Exponential backoff
 
         console.log(`🔄 Reconnecting suggestion stream in ${delay}ms (attempt ${this.suggestionReconnectAttempts}/${maxAttempts})`);
-        
+
         this.updateSuggestionUI('reconnecting', {
             attempt: this.suggestionReconnectAttempts,
             maxAttempts: maxAttempts
@@ -2335,7 +2335,7 @@ class ZavionApp {
 
         switch (status) {
             case 'connecting':
-            content.innerHTML = `
+                content.innerHTML = `
                     <div class="stream-status connecting">
                         <div class="status-icon">🔄</div>
                         <div class="status-text">
@@ -2345,7 +2345,7 @@ class ZavionApp {
                 </div>
             `;
                 break;
-                
+
             case 'monitoring':
                 content.innerHTML = `
                     <div class="stream-status monitoring">
@@ -2367,7 +2367,7 @@ class ZavionApp {
                     </div>
                 `;
                 break;
-                
+
             case 'rate_limited':
                 const waitTime = Math.ceil(data?.wait_time_seconds || 60);
                 content.innerHTML = `
@@ -2380,7 +2380,7 @@ class ZavionApp {
                     </div>
                 `;
                 break;
-                
+
             case 'reconnecting':
                 content.innerHTML = `
                     <div class="stream-status reconnecting">
@@ -2392,7 +2392,7 @@ class ZavionApp {
                     </div>
                 `;
                 break;
-                
+
             case 'error':
             case 'disconnected':
                 content.innerHTML = `
@@ -2400,20 +2400,20 @@ class ZavionApp {
                         <div class="error-icon">⚠️</div>
                         <h3>Stream ${status === 'error' ? 'Error' : 'Disconnected'}</h3>
                         <p>${data?.message || 'Unable to connect to suggestion stream'}</p>
-                        <button class="retry-btn" onclick="window.zavionApp.initializeSuggestionStream()">🔄 Reconnect</button>
+                        <button class="retry-btn" onclick="window.gumboApp.initializeSuggestionStream()">🔄 Reconnect</button>
                     </div>
                 `;
                 break;
         }
     }
-    
+
     displaySuggestionBatch(batch) {
         const content = document.getElementById('suggestionsContent');
         if (!content || !batch.suggestions || batch.suggestions.length === 0) return;
-        
+
         // Store current batch for chat functionality
         this.currentSuggestionBatch = batch;
-        
+
         content.innerHTML = `
             <div class="suggestions-header">
                 <div class="suggestions-summary">
@@ -2479,10 +2479,10 @@ class ZavionApp {
                         </div>
                         ` : ''}
                         <div class="suggestion-actions">
-                            <button class="action-btn" onclick="window.zavionApp.copySuggestion(${index})">
+                            <button class="action-btn" onclick="window.gumboApp.copySuggestion(${index})">
                                 📋 Copy
                             </button>
-                            <button class="action-btn" onclick="window.zavionApp.chatAboutSuggestion(${index})">
+                            <button class="action-btn" onclick="window.gumboApp.chatAboutSuggestion(${index})">
                                 💬 Discuss
                             </button>
                         </div>
@@ -2490,7 +2490,7 @@ class ZavionApp {
                 `).join('')}
             </div>
         `;
-        
+
         this.currentSuggestions = batch.suggestions;
         this.showToast('New suggestions received!', 'success');
     }
@@ -2498,10 +2498,10 @@ class ZavionApp {
     // Helper methods for suggestion actions
     copySuggestion(index) {
         if (!this.currentSuggestions || !this.currentSuggestions[index]) return;
-        
+
         const suggestion = this.currentSuggestions[index];
         const text = `${suggestion.title}\n\n${suggestion.description}\n\nRationale: ${suggestion.rationale}`;
-        
+
         navigator.clipboard.writeText(text).then(() => {
             this.showToast('Suggestion copied to clipboard!', 'success');
         }).catch(err => {
@@ -2512,15 +2512,15 @@ class ZavionApp {
 
     chatAboutSuggestion(index) {
         if (!this.currentSuggestionBatch || !this.currentSuggestionBatch.suggestions || !this.currentSuggestionBatch.suggestions[index]) return;
-        
+
         const suggestion = this.currentSuggestionBatch.suggestions[index];
-        
+
         // Create unique chat ID for this suggestion
         const chatId = `suggestion_${this.currentSuggestionBatch.batch_id}_${index}`;
-        
+
         // Create or get existing chat thread
         this.createSuggestionChat(chatId, suggestion, this.currentSuggestionBatch);
-        
+
         // Switch to chat interface
         this.switchTab('chat');
         this.showToast(`Starting discussion about: ${suggestion.title}`, 'info');
@@ -2551,10 +2551,10 @@ class ZavionApp {
 
         // Store chat thread
         this.activeSuggestionChats[chatId] = chatThread;
-        
+
         // Update chat sidebar
         this.updateChatSidebar();
-        
+
         // Switch to this chat
         this.switchToChat(chatId);
     }
@@ -2567,7 +2567,7 @@ class ZavionApp {
 
     displaySuggestions(suggestionsData) {
         const content = document.getElementById('suggestionsContent');
-        
+
         if (!suggestionsData.suggestions || suggestionsData.suggestions.length === 0) {
             content.innerHTML = `
                 <div class="empty-state">
@@ -2601,20 +2601,20 @@ class ZavionApp {
         if (suggestionsByTime.now.length > 0) {
             suggestionsHtml += this.createSuggestionsTimeSection('Now', suggestionsByTime.now);
         }
-        
+
         if (suggestionsByTime.today.length > 0) {
             suggestionsHtml += this.createSuggestionsTimeSection('Today', suggestionsByTime.today);
         }
-        
+
         if (suggestionsByTime.this_week.length > 0) {
             suggestionsHtml += this.createSuggestionsTimeSection('This Week', suggestionsByTime.this_week);
         }
 
         content.innerHTML = suggestionsHtml;
-        
+
         // Add event listeners to Open Chat buttons
         this.setupSuggestionChatButtons();
-        
+
         this.showToast('Suggestions generated successfully!', 'success');
     }
 
@@ -2629,7 +2629,7 @@ class ZavionApp {
             // Clean the description for safe HTML insertion
             const cleanDescription = suggestion.description.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
             const suggestionJson = JSON.stringify(suggestion).replace(/"/g, '&quot;');
-            
+
             sectionHtml += `
                 <div class="suggestion-card" data-suggestion-id="${index}">
                     <h4 class="suggestion-title">${suggestion.title}</h4>
@@ -2671,10 +2671,10 @@ class ZavionApp {
 
     openSuggestionChat(suggestion) {
         console.log('Opening chat for suggestion:', suggestion);
-        
+
         // Open the chat modal
         this.openChatModal();
-        
+
         // Initialize or switch to this chat
         this.initializeSuggestionChat(suggestion);
     }
@@ -2682,13 +2682,13 @@ class ZavionApp {
     // ================================
     // Chat System Implementation
     // ================================
-    
+
     openChatModal() {
         const chatModal = document.getElementById('chatModal');
         if (chatModal) {
             chatModal.style.display = 'flex';
             chatModal.setAttribute('aria-hidden', 'false');
-            
+
             // Setup modal event listeners if not already done
             if (!this.chatModalInitialized) {
                 this.setupChatModalListeners();
@@ -2696,7 +2696,7 @@ class ZavionApp {
             }
         }
     }
-    
+
     closeChatModal() {
         const chatModal = document.getElementById('chatModal');
         if (chatModal) {
@@ -2704,14 +2704,14 @@ class ZavionApp {
             chatModal.setAttribute('aria-hidden', 'true');
         }
     }
-    
+
     setupChatModalListeners() {
         // Close button
         const closeBtn = document.getElementById('closeChatModal');
         if (closeBtn) {
             closeBtn.addEventListener('click', () => this.closeChatModal());
         }
-        
+
         // Close on backdrop click
         const chatModal = document.getElementById('chatModal');
         if (chatModal) {
@@ -2721,18 +2721,18 @@ class ZavionApp {
                 }
             });
         }
-        
+
         // Escape key to close
         document.addEventListener('keydown', (e) => {
             if (e.key === 'Escape' && chatModal && chatModal.style.display === 'flex') {
                 this.closeChatModal();
             }
         });
-        
+
         // Chat input handling
         const chatInput = document.getElementById('chatInput');
         const chatSendBtn = document.getElementById('chatSendBtn');
-        
+
         if (chatInput) {
             // Auto-resize textarea
             chatInput.addEventListener('input', () => {
@@ -2740,7 +2740,7 @@ class ZavionApp {
                 this.autoResizeTextarea(chatInput);
                 this.toggleSendButton();
             });
-            
+
             // Send on Enter (but not Shift+Enter)
             chatInput.addEventListener('keydown', (e) => {
                 if (e.key === 'Enter' && !e.shiftKey) {
@@ -2749,20 +2749,20 @@ class ZavionApp {
                 }
             });
         }
-        
+
         if (chatSendBtn) {
             chatSendBtn.addEventListener('click', () => this.sendChatMessage());
         }
     }
-    
+
     updateCharCount() {
         const chatInput = document.getElementById('chatInput');
         const charCount = document.getElementById('charCount');
-        
+
         if (chatInput && charCount) {
             const length = chatInput.value.length;
             charCount.textContent = `${length}/2000`;
-            
+
             // Update styling based on character count
             charCount.classList.remove('warning', 'error');
             if (length > 1800) {
@@ -2772,23 +2772,23 @@ class ZavionApp {
             }
         }
     }
-    
+
     autoResizeTextarea(textarea) {
         textarea.style.height = 'auto';
         textarea.style.height = Math.min(textarea.scrollHeight, 120) + 'px';
     }
-    
+
     toggleSendButton() {
         const chatInput = document.getElementById('chatInput');
         const chatSendBtn = document.getElementById('chatSendBtn');
-        
+
         if (chatInput && chatSendBtn) {
             const hasText = chatInput.value.trim().length > 0;
             const withinLimit = chatInput.value.length <= 2000;
             chatSendBtn.disabled = !hasText || !withinLimit;
         }
     }
-    
+
     initializeSuggestionChat(suggestion) {
         // Store current chat context
         this.currentChatContext = {
@@ -2796,36 +2796,36 @@ class ZavionApp {
             messages: [],
             conversationId: null
         };
-        
+
         // Update chat header
         const chatTitle = document.getElementById('chatTitle');
         if (chatTitle) {
             chatTitle.textContent = suggestion.title;
         }
-        
+
         // Show input area
         const chatInputArea = document.getElementById('chatInputArea');
         if (chatInputArea) {
             chatInputArea.style.display = 'block';
         }
-        
+
         // Clear and setup messages area
         this.displayChatWelcome(suggestion);
-        
+
         // Add to chat list sidebar
         this.addToActiveChatsList(suggestion);
-        
+
         // Focus on input
         const chatInput = document.getElementById('chatInput');
         if (chatInput) {
             chatInput.focus();
         }
     }
-    
+
     displayChatWelcome(suggestion) {
         const chatMessages = document.getElementById('chatMessages');
         if (!chatMessages) return;
-        
+
         const welcomeHtml = `
             <div class="chat-message assistant">
                 <div class="message-content">
@@ -2850,15 +2850,15 @@ class ZavionApp {
                         </div>
                     </div>
                 `;
-        
+
         chatMessages.innerHTML = welcomeHtml;
         this.scrollToBottom(chatMessages);
     }
-    
+
     addToActiveChatsList(suggestion) {
         const chatList = document.getElementById('chatList');
         if (!chatList) return;
-        
+
         // Check if this chat already exists
         const existingChat = chatList.querySelector(`[data-chat-id="${suggestion.title}"]`);
         if (existingChat) {
@@ -2867,40 +2867,40 @@ class ZavionApp {
             existingChat.classList.add('active');
             return;
         }
-        
+
         // Create new chat list item
         const chatItem = document.createElement('div');
         chatItem.className = 'chat-list-item active';
         chatItem.dataset.chatId = suggestion.title;
-        
-        const preview = suggestion.description.length > 60 
+
+        const preview = suggestion.description.length > 60
             ? suggestion.description.substring(0, 60) + '...'
             : suggestion.description;
-        
+
         chatItem.innerHTML = `
             <div class="chat-item-title">${suggestion.title}</div>
             <div class="chat-item-preview">${preview}</div>
             <div class="chat-item-time">${this.getTimeAgo(suggestion.created_at)}</div>
         `;
-        
+
         // Add click handler
         chatItem.addEventListener('click', () => {
             this.switchToChat(suggestion);
         });
-        
+
         // Mark other chats as inactive
         chatList.querySelectorAll('.chat-list-item').forEach(item => item.classList.remove('active'));
-        
+
         // Add to top of list
         chatList.insertBefore(chatItem, chatList.firstChild);
-        
+
         // Remove empty state if present
         const emptyState = chatList.querySelector('.chat-list-empty');
         if (emptyState) {
             emptyState.remove();
         }
     }
-    
+
     switchToChat(suggestion) {
         // Update active chat in sidebar
         const chatList = document.getElementById('chatList');
@@ -2912,44 +2912,44 @@ class ZavionApp {
                 }
             });
         }
-        
+
         // Load chat context
         this.initializeSuggestionChat(suggestion);
     }
-    
+
     async sendChatMessage() {
         const chatInput = document.getElementById('chatInput');
         if (!chatInput || !this.currentChatContext) return;
-        
+
         const message = chatInput.value.trim();
         if (!message) return;
-        
+
         // Disable input while processing
         chatInput.disabled = true;
         const chatSendBtn = document.getElementById('chatSendBtn');
         if (chatSendBtn) {
             chatSendBtn.disabled = true;
         }
-        
+
         try {
             // Add user message to UI
             this.addMessageToChat('user', message);
-            
+
             // Clear input
             chatInput.value = '';
             this.updateCharCount();
             this.autoResizeTextarea(chatInput);
-            
+
             // Show typing indicator
             this.showTypingIndicator();
-            
+
             // Prepare chat request
             const chatRequest = {
                 message: message,
                 suggestion_context: this.currentChatContext.suggestion,
                 chat_history: this.currentChatContext.messages.slice(-10) // Last 10 messages
             };
-            
+
             // Send to backend
             const response = await fetch(`${this.apiBaseUrl}/chat/suggestion?user_name=Arnav Sharma`, {
                 method: 'POST',
@@ -2958,24 +2958,24 @@ class ZavionApp {
                 },
                 body: JSON.stringify(chatRequest)
             });
-            
+
             if (!response.ok) {
                 throw new Error(`HTTP error! status: ${response.status}`);
             }
-            
+
             const chatResponse = await response.json();
-            
+
             // Hide typing indicator
             this.hideTypingIndicator();
-            
+
             // Add assistant response to UI
             this.addMessageToChat('assistant', chatResponse.message);
-            
+
             // Store conversation ID
             if (chatResponse.conversation_id) {
                 this.currentChatContext.conversationId = chatResponse.conversation_id;
             }
-            
+
         } catch (error) {
             console.error('Error sending chat message:', error);
             this.hideTypingIndicator();
@@ -2988,15 +2988,15 @@ class ZavionApp {
             this.toggleSendButton();
         }
     }
-    
+
     addMessageToChat(role, content) {
         const chatMessages = document.getElementById('chatMessages');
         if (!chatMessages) return;
-        
+
         const timestamp = new Date().toISOString();
         const messageDiv = document.createElement('div');
         messageDiv.className = `chat-message ${role}`;
-        
+
         messageDiv.innerHTML = `
             <div class="message-content">${this.formatMessageContent(content)}</div>
             <div class="message-meta">
@@ -3006,7 +3006,7 @@ class ZavionApp {
 
         chatMessages.appendChild(messageDiv);
         this.scrollToBottom(chatMessages);
-        
+
         // Store in chat context
         if (this.currentChatContext) {
             this.currentChatContext.messages.push({
@@ -3016,7 +3016,7 @@ class ZavionApp {
             });
         }
     }
-    
+
     formatMessageContent(content) {
         // Basic markdown-style formatting
         return content
@@ -3025,43 +3025,43 @@ class ZavionApp {
             .replace(/\*(.*?)\*/g, '<em>$1</em>')
             .replace(/`(.*?)`/g, '<code>$1</code>');
     }
-    
+
     showTypingIndicator() {
         const typingIndicator = document.getElementById('typingIndicator');
         const statusIndicator = document.querySelector('.status-indicator');
         const chatStatus = document.getElementById('chatStatus');
-        
+
         if (typingIndicator) {
             typingIndicator.style.display = 'flex';
         }
-        
+
         if (statusIndicator) {
             statusIndicator.classList.add('typing');
         }
-        
+
         if (chatStatus) {
             chatStatus.textContent = 'Thinking...';
         }
     }
-    
+
     hideTypingIndicator() {
         const typingIndicator = document.getElementById('typingIndicator');
         const statusIndicator = document.querySelector('.status-indicator');
         const chatStatus = document.getElementById('chatStatus');
-        
+
         if (typingIndicator) {
             typingIndicator.style.display = 'none';
         }
-        
+
         if (statusIndicator) {
             statusIndicator.classList.remove('typing');
         }
-        
+
         if (chatStatus) {
             chatStatus.textContent = 'Ready';
         }
     }
-    
+
     scrollToBottom(element) {
         if (element) {
             element.scrollTop = element.scrollHeight;
@@ -3072,7 +3072,7 @@ class ZavionApp {
         const now = new Date();
         const time = new Date(timestamp);
         const diffInSeconds = Math.floor((now - time) / 1000);
-        
+
         if (diffInSeconds < 60) return 'Just now';
         if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)} min ago`;
         if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)} hr ago`;
@@ -3175,7 +3175,7 @@ class ZavionApp {
 
 // Initialize application when DOM is loaded
 document.addEventListener('DOMContentLoaded', () => {
-    window.zavionApp = new ZavionApp();
+    window.gumboApp = new GumboApp();
 });
 
 // Add CSS for results display dynamically

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Zavion GUM Setup Wizard
+Gumbo Setup Wizard
 
 A simple command-line setup wizard to configure API keys and initial settings
 for new users. This eliminates the need for environment variables.
@@ -23,10 +23,10 @@ except ImportError:
 def print_banner():
     """Print the setup wizard banner."""
     print("=" * 60)
-    print("           ZAVION GUM SETUP WIZARD")
+    print("           GUMBO GUM SETUP WIZARD")
     print("=" * 60)
     print()
-    print("Welcome! This wizard will help you configure Zavion GUM.")
+    print("Welcome! This wizard will help you configure Gumbo GUM.")
     print("You'll need at least one AI API key to get started.")
     print()
 
@@ -224,7 +224,7 @@ def show_summary(config_manager):
     
     # Check if configuration is complete
     if config_manager.is_configured():
-        print("🎉 Configuration complete! You can now run Zavion GUM.")
+        print("🎉 Configuration complete! You can now run Gumbo GUM.")
         print()
         print("Next steps:")
         print("1. Run 'python start_gum.py' to start the application")

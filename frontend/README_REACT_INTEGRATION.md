@@ -1,6 +1,6 @@
-# React Component Integration for Zavion Frontend
+# React Component Integration for Gumbo Frontend
 
-This document provides a complete guide for integrating React components into the existing Zavion frontend application.
+This document provides a complete guide for integrating React components into the existing Gumbo frontend application.
 
 ## 🎯 Overview
 
@@ -258,7 +258,7 @@ The bridge utilities ensure smooth coexistence during the transition.
 
 ## 📄 License
 
-This integration follows the same license as the main Zavion project.
+This integration follows the same license as the main Gumbo project.
 
 ## 🤝 Contributing
 

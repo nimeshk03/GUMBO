@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-Simple HTTP server for Zavion Frontend
+Simple HTTP server for Gumbo Frontend
 
-Serves the static frontend files for the Zavion web interface.
+Serves the static frontend files for the Gumbo web interface.
 """
 
 import os
@@ -12,7 +12,7 @@ from pathlib import Path
 from urllib.parse import urlparse
 from typing import List
 
-class ZavionFrontendHandler(http.server.SimpleHTTPRequestHandler):
+class GumboFrontendHandler(http.server.SimpleHTTPRequestHandler):
     """Custom handler to serve the frontend files."""
     
     def __init__(self, *args, **kwargs):
@@ -42,7 +42,7 @@ class ZavionFrontendHandler(http.server.SimpleHTTPRequestHandler):
             # Inject the backend address as a global JavaScript variable
             config_script = f"""
     <script>
-        window.ZAVION_CONFIG = {{
+        window.GUMBO_CONFIG = {{
             apiBaseUrl: '{backend_address}'
         }};
     </script>"""
@@ -145,7 +145,7 @@ class ZavionFrontendHandler(http.server.SimpleHTTPRequestHandler):
 def serve_frontend(port=3000, host='localhost'):
     """Start the frontend server."""
     # Load and display the configuration
-    handler = ZavionFrontendHandler
+    handler = GumboFrontendHandler
     frontend_dir = Path(__file__).parent
     
     # Check backend address with proper hierarchy
@@ -188,12 +188,12 @@ def serve_frontend(port=3000, host='localhost'):
     
     backend_address, source = load_config_for_display()
     
-    print(f"Starting Zavion Frontend Server")
+    print(f"Starting Gumbo Frontend Server")
     print(f"Serving from: {frontend_dir}")
     print(f"Frontend URL: http://{host}:{port}")
     print(f"API Backend URL: {backend_address}")
     print(f"Configuration source: {source}")
-    print(f"Open the frontend URL in your browser to access the Zavion interface")
+    print(f"Open the frontend URL in your browser to access the Gumbo interface")
     print("=" * 60)
     
     try:
@@ -213,7 +213,7 @@ def serve_frontend(port=3000, host='localhost'):
 if __name__ == "__main__":
     import argparse
     
-    parser = argparse.ArgumentParser(description="Zavion Frontend Server")
+    parser = argparse.ArgumentParser(description="Gumbo Frontend Server")
     parser.add_argument("--port", type=int, default=3000, help="Port to serve on (default: 3000)")
     parser.add_argument("--host", default="0.0.0.0", help="Host to bind to (default: localhost)")
     

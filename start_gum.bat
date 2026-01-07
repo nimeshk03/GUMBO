@@ -1,5 +1,5 @@
 @echo off
-echo Starting Zavion GUM Application...
+echo Starting Gumbo GUM Application...
 echo.
 echo This will start the background tracking service and open your dashboard.
 echo.

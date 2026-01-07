@@ -1,6 +1,6 @@
-# Zavion Frontend Web Interface
+# Gumbo Frontend Web Interface
 
-A modern, responsive web interface for interacting with the Zavion REST API. This frontend allows users to submit observations, query insights, and view observation history through an intuitive web interface.
+A modern, responsive web interface for interacting with the Gumbo REST API. This frontend allows users to submit observations, query insights, and view observation history through an intuitive web interface.
 
 ## Features
 
@@ -47,13 +47,13 @@ frontend/
 ## Setup & Installation
 
 ### Prerequisites
-- Zavion API Controller running (usually on port 8001)
+- Gumbo API Controller running (usually on port 8001)
 - Python 3.6+ (for the simple server)
 - Modern web browser
 
 ### Quick Start
 
-1. **Start the Zavion API Controller** (in the main Zavion directory):
+1. **Start the Gumbo API Controller** (in the main Gumbo directory):
    ```bash
    cd /path/to/gum
    python controller.py --port 8001
@@ -87,7 +87,7 @@ The frontend automatically loads the API base URL from the environment configura
 
 1. **Recommended**: Edit `frontend/.env` file:
    ```env
-   # Zavion Frontend Configuration
+   # Gumbo Frontend Configuration
    BACKEND_ADDRESS=http://localhost:8002
    ```
 
@@ -198,7 +198,7 @@ python server.py --port 8080
 
 
 ### API Integration
-All API calls are handled in the `ZavionApp` class methods:
+All API calls are handled in the `GumboApp` class methods:
 - `submitTextObservation()`
 - `submitImageObservation()`
 - `queryInsights()`
@@ -206,8 +206,8 @@ All API calls are handled in the `ZavionApp` class methods:
 
 ## Troubleshooting
 
-### "Cannot connect to Zavion API"
-- Ensure the Zavion API controller is running on port 8001
+### "Cannot connect to Gumbo API"
+- Ensure the Gumbo API controller is running on port 8001
 - Check that both frontend and API are on the same network
 - Verify firewall settings aren't blocking connections
 
@@ -228,7 +228,7 @@ All API calls are handled in the `ZavionApp` class methods:
 
 ## Security Considerations
 ### Privacy
-- All data is processed locally through your Zavion instance
-- Images are sent to Azure OpenAI for analysis (per Zavion configuration)
+- All data is processed locally through your Gumbo instance
+- Images are sent to Azure OpenAI for analysis (per Gumbo configuration)
 - No data is stored by the frontend itself
 

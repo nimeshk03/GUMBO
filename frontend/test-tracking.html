@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -8,6 +9,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
 </head>
+
 <body>
     <div class="main-content">
         <div class="tracking-control-section">
@@ -15,13 +17,13 @@
                 <h3>Screen Tracking Control</h3>
                 <p>Control your screen monitoring from here</p>
             </div>
-            
+
             <div class="tracking-controls">
                 <div class="username-input">
                     <label for="username">Username:</label>
                     <input type="text" id="username" placeholder="Enter your username" value="">
                 </div>
-                
+
                 <div class="tracking-status">
                     <span class="status-label">Status:</span>
                     <span class="status-indicator" id="trackingStatus">
@@ -29,7 +31,7 @@
                         <span id="statusText">Unknown</span>
                     </span>
                 </div>
-                
+
                 <div class="tracking-buttons">
                     <button class="btn-primary" id="startTracking">
                         <i class="fas fa-play"></i>
@@ -50,25 +52,25 @@
 
     <script>
         // Simple test implementation
-        document.addEventListener('DOMContentLoaded', function() {
+        document.addEventListener('DOMContentLoaded', function () {
             const usernameInput = document.getElementById('username');
             const startBtn = document.getElementById('startTracking');
             const stopBtn = document.getElementById('stopTracking');
             const toggleBtn = document.getElementById('toggleTracking');
             const statusIndicator = document.getElementById('trackingStatus');
             const statusText = document.getElementById('statusText');
-            
+
             // Load saved username
-            const savedUsername = localStorage.getItem('zavion-username');
+            const savedUsername = localStorage.getItem('gumbo-username');
             if (savedUsername) {
                 usernameInput.value = savedUsername;
             }
-            
+
             // Save username on change
             usernameInput.addEventListener('change', (e) => {
-                localStorage.setItem('zavion-username', e.target.value);
+                localStorage.setItem('gumbo-username', e.target.value);
             });
-            
+
             // Test button clicks
             startBtn.addEventListener('click', () => {
                 if (!usernameInput.value) {
@@ -78,7 +80,7 @@
                 setStatus('active', 'Tracking Active (Test)');
                 alert('Start tracking clicked for: ' + usernameInput.value);
             });
-            
+
             stopBtn.addEventListener('click', () => {
                 if (!usernameInput.value) {
                     alert('Please enter a username first');
@@ -87,7 +89,7 @@
                 setStatus('inactive', 'Tracking Stopped (Test)');
                 alert('Stop tracking clicked for: ' + usernameInput.value);
             });
-            
+
             toggleBtn.addEventListener('click', () => {
                 if (!usernameInput.value) {
                     alert('Please enter a username first');
@@ -101,27 +103,27 @@
                 }
                 alert('Toggle tracking clicked for: ' + usernameInput.value);
             });
-            
+
             function setStatus(status, text) {
                 // Remove all status classes
                 statusIndicator.classList.remove('tracking-active', 'tracking-inactive', 'tracking-unknown');
-                
+
                 // Add appropriate status class
                 statusIndicator.classList.add(`tracking-${status}`);
-                
+
                 // Update status icon
                 const icon = statusIndicator.querySelector('i');
                 icon.className = 'fas fa-circle';
                 icon.classList.add(`tracking-${status}`);
-                
+
                 // Update status text
                 statusText.textContent = text;
             }
-            
+
             // Set initial status
             setStatus('unknown', 'Enter username first');
         });
     </script>
 </body>
-</html>
 
+</html>

@@ -1,6 +1,6 @@
-# Contributing to Zavion
+# Contributing to Gumbo
 
-Thank you for your interest in contributing to Zavion! We welcome contributions from the community to help improve this project.
+Thank you for your interest in contributing to Gumbo! We welcome contributions from the community to help improve this project.
 
 ## How to Contribute
 
