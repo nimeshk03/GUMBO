@@ -126,4 +126,8 @@ gpt-4o/
 claude-*/
 
 # Empty/temp directories
-gumcp/ 
+gumcp/
+
+# Node.js dependencies
+node_modules/
+frontend/node_modules/
