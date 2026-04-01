@@ -367,13 +367,7 @@ async def ensure_gum_instance(user_name: Optional[str] = None) -> gum:
         )
         
         await gum_instance.connect_db()
-        
-        # Ensure all database tables exist (including suggestions table)
-        from gum.models import init_db
-        logger.info(f"🔍 Creating database tables at: {gum_instance.db_path}")
-        await init_db(gum_instance.db_path)
-        logger.info("🔍 Database tables created successfully")
-        
+
         logger.info("GUM instance connected to database")
         logger.info("GUM configured with unified AI client for hybrid text/vision processing")
     
@@ -1301,31 +1295,31 @@ async def get_propositions_by_hour(
         # This accounts for the timezone offset
         import pytz
         from datetime import timedelta
-        
-        # Get user's timezone (assuming PDT for now, but this should be configurable)
-        user_tz = pytz.timezone('US/Pacific')  # This handles PDT/PST automatically
-        
-        # Create the start of the selected date in user's timezone
+
+        tz_name = os.getenv("LOCAL_TIMEZONE", "UTC")
+        user_tz = pytz.timezone(tz_name)
+
+        # Create the start of the selected date in the configured local timezone
         local_start = user_tz.localize(datetime.combine(target_date, datetime.min.time()))
         local_end = user_tz.localize(datetime.combine(target_date, datetime.max.time()))
-        
+
         # Convert to UTC
         utc_start = local_start.astimezone(pytz.UTC)
         utc_end = local_end.astimezone(pytz.UTC)
-        
+
         logger.info(f"Getting propositions by hour for date: {target_date}, confidence_min={confidence_min}")
-        
+
         # Get GUM instance
         gum_inst = await ensure_gum_instance(user_name)
-        
+
         # Query propositions grouped by hour
         async with gum_inst._session() as session:
             from gum.models import Proposition
             from sqlalchemy import select, func, extract, and_
-            
+
             # Get current time to filter out future hours
             now = datetime.now(timezone.utc)
-            
+
             # Build base query for the target date using the calculated UTC range
             stmt = select(Proposition).where(
                 and_(
@@ -1334,22 +1328,22 @@ async def get_propositions_by_hour(
                     Proposition.created_at <= now  # Only past hours
                 )
             )
-            
+
             # Apply confidence filter if specified
             if confidence_min is not None:
                 stmt = stmt.where(Proposition.confidence >= confidence_min)
-            
+
             # Order by creation time
             stmt = stmt.order_by(Proposition.created_at)
-            
+
             result = await session.execute(stmt)
             propositions = result.scalars().all()
-            
+
             # Group propositions by hour (convert UTC to local time)
             hourly_groups = {}
             for prop in propositions:
                 # Convert UTC time to local time for hour grouping
-                local_time = prop.created_at.astimezone(pytz.timezone('US/Pacific'))
+                local_time = prop.created_at.astimezone(user_tz)
                 local_hour = local_time.hour
                 if local_hour not in hourly_groups:
                     hourly_groups[local_hour] = []
@@ -2692,10 +2686,22 @@ async def global_exception_handler(request, exc):
 async def startup_event():
     """Startup event handler."""
     logger.info("Starting GUM API Controller...")
-    logger.info(" AI Processing: Unified AI Client (Azure OpenAI + OpenRouter)")
-    logger.info("    Text Tasks: Azure OpenAI")
-    logger.info("    Vision Tasks: OpenRouter (Qwen Vision)")
-    logger.info(" Hybrid AI configuration initialized")
+    logger.info(" AI Processing: Unified AI Client (OpenRouter)")
+    logger.info("    Text Tasks: OpenRouter (PROPOSE_MODEL)")
+    logger.info("    Vision Tasks: OpenRouter (SCREEN_MODEL)")
+    logger.info("    Suggestion Tasks: OpenRouter (SUGGEST_MODEL)")
+
+    # Initialize the gum instance so the DB session factory is available,
+    # then pass it to the Gumbo engine so suggestions can be persisted.
+    try:
+        gum_inst = await ensure_gum_instance()
+        if GUMBO_AVAILABLE and gum_inst.Session is not None:
+            engine = await get_gumbo_engine()
+            engine.set_db_session_factory(gum_inst.Session)
+            logger.info("Gumbo engine session factory wired to gum DB session")
+    except Exception as e:
+        logger.error(f"Failed to wire Gumbo engine session factory: {e}")
+
     logger.info("GUM API Controller started successfully")
 
 

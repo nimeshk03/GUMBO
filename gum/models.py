@@ -8,6 +8,7 @@ from typing import Optional
 from sqlalchemy import (
     Column,
     DateTime,
+    Float,
     ForeignKey,
     Integer,
     String,
@@ -205,9 +206,15 @@ class Suggestion(Base):
         rationale (str): AI reasoning for this suggestion.
         expected_utility (Optional[float]): Expected utility score.
         probability_useful (float): Probability this suggestion is useful (0-1).
-        trigger_proposition_id (Optional[int]): ID of proposition that triggered this suggestion.
+        trigger_proposition_id (Optional[int]): FK to the proposition that triggered generation.
         batch_id (str): Unique identifier for the suggestion batch.
         delivered (bool): Whether suggestion has been delivered to frontend.
+        trigger_proposition_text (Optional[str]): Snapshot of trigger proposition text.
+        trigger_proposition_confidence (Optional[int]): Snapshot of trigger proposition confidence.
+        trigger_proposition_reasoning (Optional[str]): Snapshot of trigger proposition reasoning.
+        processing_time_seconds (Optional[float]): Seconds taken to generate this batch.
+        context_propositions_count (Optional[int]): Number of context propositions used.
+        generation_model (Optional[str]): Model used for generation (SUGGEST_MODEL env var).
         created_at (datetime): When the suggestion was created.
         updated_at (datetime): When the suggestion was last updated.
     """
@@ -223,6 +230,17 @@ class Suggestion(Base):
     trigger_proposition_id: Mapped[Optional[int]] = mapped_column(ForeignKey("propositions.id", ondelete="SET NULL"))
     batch_id:              Mapped[str]           = mapped_column(String(36), nullable=False, index=True)
     delivered:             Mapped[bool]          = mapped_column(nullable=False, default=False, index=True)
+
+    # Snapshot of the trigger proposition at generation time — stored inline so
+    # the suggestion row is self-contained for data export and sharing.
+    trigger_proposition_text:       Mapped[Optional[str]]   = mapped_column(Text,         nullable=True)
+    trigger_proposition_confidence: Mapped[Optional[int]]   = mapped_column(Integer,      nullable=True)
+    trigger_proposition_reasoning:  Mapped[Optional[str]]   = mapped_column(Text,         nullable=True)
+
+    # Batch-level generation metadata.
+    processing_time_seconds:    Mapped[Optional[float]] = mapped_column(Float,        nullable=True)
+    context_propositions_count: Mapped[Optional[int]]   = mapped_column(Integer,      nullable=True)
+    generation_model:           Mapped[Optional[str]]   = mapped_column(String(100),  nullable=True)
 
     created_at: Mapped[str] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
@@ -375,6 +393,32 @@ def create_observations_fts(conn) -> None:
     """))
 
 
+def _migrate_suggestions_table(conn) -> None:
+    """Add metadata columns to an existing suggestions table.
+
+    SQLite does not support ALTER TABLE ... ADD COLUMN IF NOT EXISTS, so each
+    statement is attempted individually and the OperationalError raised for
+    duplicate column names is silenced.  This is a no-op on a fresh database
+    because create_all will have already created the table with all columns.
+    """
+    new_columns = [
+        ("trigger_proposition_text",       "TEXT"),
+        ("trigger_proposition_confidence", "INTEGER"),
+        ("trigger_proposition_reasoning",  "TEXT"),
+        ("processing_time_seconds",        "REAL"),
+        ("context_propositions_count",     "INTEGER"),
+        ("generation_model",               "VARCHAR(100)"),
+    ]
+    for column_name, column_type in new_columns:
+        try:
+            conn.execute(sql_text(
+                f"ALTER TABLE suggestions ADD COLUMN {column_name} {column_type}"
+            ))
+        except Exception:
+            # Column already exists — safe to ignore.
+            pass
+
+
 async def init_db(
     db_path: str = "gum.db",
     db_directory: Optional[str] = None,
@@ -402,6 +446,7 @@ async def init_db(
         await conn.run_sync(Base.metadata.create_all)
         await conn.run_sync(create_fts_table)
         await conn.run_sync(create_observations_fts)
+        await conn.run_sync(_migrate_suggestions_table)
 
     Session = async_sessionmaker(
         engine, 

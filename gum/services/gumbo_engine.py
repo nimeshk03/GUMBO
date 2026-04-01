@@ -175,12 +175,28 @@ class GumboEngine:
             "last_batch_at": None,
             "rate_limit_hits": 0
         }
-        
+
+        # Session factory provided by controller at startup
+        self._session_factory = None
+
         # Engine lifecycle
         self._started = False
         self._startup_time = None
-        
+
         logger.info("GumboEngine initialized")
+
+    def set_db_session_factory(self, session_factory) -> None:
+        """Set the SQLAlchemy async session factory used to persist suggestions.
+
+        Must be called during application startup (before any suggestions are
+        generated) so the engine can write to the same database as the gum
+        instance running in the controller.
+
+        Args:
+            session_factory: The async_sessionmaker returned by init_db.
+        """
+        self._session_factory = session_factory
+        logger.info("GumboEngine session factory registered")
     
     async def start(self):
         """Start the Gumbo engine with proper initialization."""
@@ -248,12 +264,16 @@ class GumboEngine:
         batch_id = str(uuid.uuid4())
         
         try:
-            logger.info(f"🎯 Gumbo triggered for proposition {proposition_id}")
-            
+            logger.info(
+                f"[GUMBO] ---- Suggestion pipeline START (proposition_id={proposition_id}) ----"
+            )
+
             # Step 1: Rate limiting check
             if not await self.rate_limiter.can_generate_suggestions():
                 wait_time = await self.rate_limiter.get_wait_time()
-                logger.info(f"⏰ Gumbo rate limited, next available in {wait_time:.1f}s")
+                logger.info(
+                    f"[GUMBO] Step 1 — Rate limited. Next batch available in {wait_time:.1f}s"
+                )
                 
                 self._suggestion_metrics["rate_limit_hits"] += 1
                 
@@ -273,20 +293,52 @@ class GumboEngine:
             # Step 2: Retrieve trigger proposition
             trigger_prop = await self._get_trigger_proposition(session, proposition_id)
             if not trigger_prop:
-                logger.error(f"Trigger proposition {proposition_id} not found")
+                logger.error(
+                    f"[GUMBO] Step 2 — Trigger proposition {proposition_id} not found in DB"
+                )
                 return None
-            
+
+            logger.info(
+                f"[GUMBO] Step 2 — Trigger proposition loaded: "
+                f"confidence={trigger_prop.confidence} | "
+                f"{trigger_prop.text[:100].replace(chr(10), ' ')}..."
+            )
+
             # Step 3: Contextual retrieval
+            logger.info(f"[GUMBO] Step 3 — Retrieving contextual propositions from DB...")
             context_result = await self._contextual_retrieval(session, trigger_prop)
-            
+            logger.info(
+                f"[GUMBO] Step 3 — Context: {len(context_result.related_propositions)} related propositions, "
+                f"{len(context_result.recent_observations)} recent observations"
+            )
+
             # Step 4: Multi-candidate generation
+            logger.info(
+                f"[GUMBO] Step 4 — Calling LLM "
+                f"(SUGGEST_MODEL={os.getenv('SUGGEST_MODEL', 'default')}) "
+                f"to generate suggestion candidates..."
+            )
             suggestions = await self._generate_suggestion_candidates(trigger_prop, context_result)
-            
+            logger.info(f"[GUMBO] Step 4 — LLM returned {len(suggestions)} suggestion candidates")
+            for idx, s in enumerate(suggestions):
+                preview = s.content[:100].replace("\n", " ") if hasattr(s, "content") else str(s)[:100]
+                logger.info(f"[GUMBO]   Candidate {idx + 1}/{len(suggestions)}: {preview}...")
+
             # Step 5: Mixed-initiative filtering (utility scoring)
+            logger.info(f"[GUMBO] Step 5 — Scoring {len(suggestions)} candidates for utility...")
             scored_suggestions = await self._score_suggestions(trigger_prop, suggestions, context_result)
-            
+            logger.info(f"[GUMBO] Step 5 — {len(scored_suggestions)} suggestions passed scoring")
+            for idx, s in enumerate(scored_suggestions):
+                score_info = f"utility={s.utility_score:.2f}" if hasattr(s, "utility_score") else ""
+                preview = s.content[:80].replace("\n", " ") if hasattr(s, "content") else str(s)[:80]
+                logger.info(f"[GUMBO]   Scored {idx + 1}/{len(scored_suggestions)}: {score_info} | {preview}...")
+
             # Step 6: Create suggestion batch
             processing_time = time.time() - start_time
+            logger.info(
+                f"[GUMBO] Step 6 — Building suggestion batch "
+                f"({len(scored_suggestions)} suggestions, batch_id={batch_id})"
+            )
             batch = SuggestionBatch(
                 suggestions=scored_suggestions,
                 trigger_proposition_id=proposition_id,
@@ -298,15 +350,17 @@ class GumboEngine:
             
             # Update metrics
             self._update_metrics(batch)
-            
-            # Step 7: Real-time delivery via SSE
-            logger.error(f"🚨🚨🚨 ABOUT TO BROADCAST BATCH: {len(batch.suggestions)} suggestions")
-            print(f"🚨🚨🚨 ABOUT TO BROADCAST BATCH: {len(batch.suggestions)} suggestions")
+
+            # Step 7: Persist to database
+            logger.info(
+                f"[GUMBO] Step 7 — Saving {len(batch.suggestions)} suggestions "
+                f"(batch_id={batch_id}) to database..."
+            )
             await self._broadcast_suggestion_batch(batch)
-            logger.error(f"🚨🚨🚨 BROADCAST CALL COMPLETED")
-            print(f"🚨🚨🚨 BROADCAST CALL COMPLETED")
-            
-            logger.info(f"✅ Gumbo completed for proposition {proposition_id} in {processing_time:.2f}s")
+            logger.info(
+                f"[GUMBO] Pipeline complete for proposition {proposition_id} "
+                f"in {processing_time:.2f}s — {len(batch.suggestions)} suggestions saved"
+            )
             return batch
             
         except Exception as e:
@@ -359,10 +413,14 @@ class GumboEngine:
                 trigger_reasoning=trigger_prop.reasoning[:300]  # Truncate for prompt size
             )
             
-            # Call LLM for semantic query generation  
+            # Call LLM for semantic query generation
             semantic_query = await asyncio.wait_for(
-                self.ai_client.text_completion([{"role": "user", "content": query_prompt}], max_tokens=50),
-                timeout=30.0
+                self.ai_client.text_completion(
+                    [{"role": "user", "content": query_prompt}],
+                    max_tokens=50,
+                    model=os.getenv("SUGGEST_MODEL"),
+                ),
+                timeout=30.0,
             )
             
             semantic_query = semantic_query.strip().strip('"').strip("'")
@@ -443,8 +501,12 @@ class GumboEngine:
             
             # Call LLM for suggestion generation
             response = await asyncio.wait_for(
-                self.ai_client.text_completion([{"role": "user", "content": generation_prompt}], max_tokens=1000),
-                timeout=30.0
+                self.ai_client.text_completion(
+                    [{"role": "user", "content": generation_prompt}],
+                    max_tokens=1000,
+                    model=os.getenv("SUGGEST_MODEL"),
+                ),
+                timeout=30.0,
             )
             
             # Parse JSON response
@@ -497,8 +559,12 @@ class GumboEngine:
             )
             
             response = await asyncio.wait_for(
-                self.ai_client.text_completion([{"role": "user", "content": scoring_prompt}], max_tokens=800),
-                timeout=30.0
+                self.ai_client.text_completion(
+                    [{"role": "user", "content": scoring_prompt}],
+                    max_tokens=800,
+                    model=os.getenv("SUGGEST_MODEL"),
+                ),
+                timeout=30.0,
             )
             
             # Parse scoring response
@@ -637,42 +703,75 @@ class GumboEngine:
         logger.info(f"🚨 _broadcast_sse_event completed")
     
     async def _broadcast_sse_event(self, event: SSEEvent):
-        """Save suggestions directly to database (replaced HTTP broadcast)."""
-        logger.info(f"🚨 GUMBO SAVING SUGGESTIONS DIRECTLY TO DATABASE: {len(event.data.get('suggestions', []))} suggestions")
-        
+        """Persist suggestions to the database using the shared session factory."""
+        suggestions_list = event.data.get("suggestions", [])
+        logger.info(f"Saving {len(suggestions_list)} suggestions to database")
+
+        if self._session_factory is None:
+            logger.error(
+                "No session factory set on GumboEngine — suggestions cannot be saved. "
+                "Ensure set_db_session_factory() is called during startup."
+            )
+            return
+
         try:
-            # Save suggestions directly to database (same pattern as controller)
-            from gum.gum import gum
-            gum_inst = gum()
-            await gum_inst.connect_db()
-            
-            async with gum_inst._session() as session:
-                from gum.models import Suggestion
-                
-                # Save each suggestion directly to database
-                suggestions_saved = 0
-                for suggestion_data in event.data.get("suggestions", []):
-                    suggestion = Suggestion(
-                        title=suggestion_data.get("title", "Untitled")[:200],
-                        description=suggestion_data.get("description", "")[:1000],
-                        category=suggestion_data.get("category", "general")[:100],
-                        rationale=suggestion_data.get("rationale", "")[:500],  # AI generates 'rationale', not 'evidence'
-                        expected_utility=suggestion_data.get("priority", 5) / 10.0,  # AI generates 'priority', not 'confidence'
-                        probability_useful=0.7,
-                        trigger_proposition_id=event.data.get("trigger_proposition_id"),
-                        batch_id=f"gumbo_{int(time.time())}",
-                        delivered=False
-                    )
-                    session.add(suggestion)
-                    suggestions_saved += 1
-                
-                await session.commit()
-                logger.info(f"💾 GUMBO SAVED {suggestions_saved} SUGGESTIONS DIRECTLY TO DATABASE")
-                
+            from gum.models import Suggestion, Proposition
+
+            async with self._session_factory() as session:
+                async with session.begin():
+                    suggestions_saved = 0
+                    batch_id = f"gumbo_{int(time.time())}"
+                    trigger_proposition_id = event.data.get("trigger_proposition_id")
+                    processing_time = event.data.get("processing_time_seconds")
+                    context_count = event.data.get("context_propositions_used")
+                    generation_model = os.getenv("SUGGEST_MODEL")
+
+                    # Fetch trigger proposition once so we can snapshot its
+                    # text/confidence/reasoning on every suggestion row.
+                    trigger_prop = None
+                    if trigger_proposition_id is not None:
+                        trigger_prop = await session.get(Proposition, trigger_proposition_id)
+                        if trigger_prop is None:
+                            logger.warning(
+                                f"Trigger proposition {trigger_proposition_id} not found "
+                                f"— snapshot fields will be NULL"
+                            )
+
+                    for suggestion_data in suggestions_list:
+                        suggestion = Suggestion(
+                            title=suggestion_data.get("title", "Untitled")[:200],
+                            description=suggestion_data.get("description", "")[:1000],
+                            category=suggestion_data.get("category", "general")[:100],
+                            rationale=suggestion_data.get("rationale", "")[:500],
+                            expected_utility=suggestion_data.get("expected_utility", 5.0),
+                            probability_useful=suggestion_data.get("probability_useful", 0.7),
+                            trigger_proposition_id=trigger_proposition_id,
+                            batch_id=batch_id,
+                            delivered=False,
+                            # Snapshot fields
+                            trigger_proposition_text=(
+                                trigger_prop.text if trigger_prop else None
+                            ),
+                            trigger_proposition_confidence=(
+                                trigger_prop.confidence if trigger_prop else None
+                            ),
+                            trigger_proposition_reasoning=(
+                                trigger_prop.reasoning if trigger_prop else None
+                            ),
+                            # Batch metadata
+                            processing_time_seconds=processing_time,
+                            context_propositions_count=context_count,
+                            generation_model=generation_model,
+                        )
+                        session.add(suggestion)
+                        suggestions_saved += 1
+
+            logger.info(f"Saved {suggestions_saved} suggestions to database (batch: {batch_id})")
+
         except Exception as e:
-            logger.error(f"❌ GUMBO FAILED TO SAVE SUGGESTIONS: {e}")
             import traceback
-            logger.error(f"❌ Full traceback: {traceback.format_exc()}")
+            logger.error(f"Failed to save suggestions: {e}")
+            logger.error(traceback.format_exc())
     
     async def register_sse_connection(self, connection):
         """Register a new SSE connection."""

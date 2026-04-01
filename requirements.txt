@@ -1,22 +1,37 @@
-# Core dependencies
-fastapi==0.104.1
-uvicorn[standard]==0.24.0
-python-multipart==0.0.6
-pydantic==2.5.0
-sse-starlette==1.8.2
+# Web framework
+fastapi>=0.104.1
+uvicorn[standard]>=0.24.0
+python-multipart>=0.0.6
+sse-starlette>=1.8.2
 
-# AI/ML dependencies
-openai==1.3.7
+# Data validation
+pydantic>=2.5.0
 
-# Screen capture and system monitoring
-mss
-pynput
-Pillow
+# AI / LLM
+openai>=1.52.0
+aiohttp>=3.9.0
 
-# Database and utilities
+# Database
 SQLAlchemy>=2.0.0
-aiosqlite
-python-dotenv==1.0.0
+aiosqlite>=0.19.0
 
-# Timezone handling
-pytz
+# ML / text processing
+numpy>=1.26.0
+scikit-learn>=1.3.0
+shapely>=2.0.0
+
+# Screen capture and input
+mss>=9.0.0
+pynput>=1.7.6
+Pillow>=10.0.0
+
+# Linux input (Wayland-safe mouse events and window management)
+evdev>=1.6.1
+ewmh>=0.1.6
+python-xlib>=0.33
+
+# Utilities
+python-dotenv>=1.0.0
+python-dateutil>=2.8.2
+pytz>=2023.3
+setuptools>=68.0.0

@@ -68,28 +68,32 @@ class OpenAITextClient:
         self,
         messages: List[Dict[str, Any]],
         max_tokens: int = 1000,
-        temperature: float = 0.1
+        temperature: float = 0.1,
+        model: str = None,
     ) -> str:
         """
         Send a chat completion request to OpenAI.
-        
+
         Args:
             messages: List of message dictionaries
             max_tokens: Maximum tokens to generate
             temperature: Temperature for generation
-            
+            model: Optional model override. When provided, takes precedence over
+                   the instance-level model set via OPENAI_MODEL env var.
+
         Returns:
             The AI response content as a string
         """
-        
+        effective_model = model or self.model
+
         logger.info("OpenAI text completion request")
-        logger.info(f"   Model: {self.model}")
+        logger.info(f"   Model: {effective_model}")
         logger.info(f"   Messages: {len(messages)} message(s)")
         logger.info(f"   Max tokens: {max_tokens}")
-        
+
         try:
             response = await self.client.chat.completions.create(
-                model=self.model,
+                model=effective_model,
                 messages=messages,  # type: ignore
                 max_tokens=max_tokens,
                 temperature=temperature
@@ -126,18 +130,20 @@ async def get_openai_text_client() -> OpenAITextClient:
 async def openai_text_completion(
     messages: List[Dict[str, Any]],
     max_tokens: int = 1000,
-    temperature: float = 0.1
+    temperature: float = 0.1,
+    model: str = None,
 ) -> str:
     """
     Convenience function for OpenAI text completion.
-    
+
     Args:
         messages: List of message dictionaries
         max_tokens: Maximum tokens to generate
         temperature: Temperature for generation
-        
+        model: Optional model override (e.g. a per-task model from env vars).
+
     Returns:
         The AI response content as a string
     """
     client = await get_openai_text_client()
-    return await client.chat_completion(messages, max_tokens, temperature)
+    return await client.chat_completion(messages, max_tokens, temperature, model=model)

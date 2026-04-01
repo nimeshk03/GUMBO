@@ -1,7 +1,9 @@
-TRANSCRIPTION_PROMPT = """Transcribe ALL visible content in markdown exactly as shown. Include application names, URLs, file paths, and timestamps.
+TRANSCRIPTION_PROMPT = """IMPORTANT: The active application name and window title are provided above as ground truth. Use them directly in your transcription — do not guess the application from visual cues alone.
+
+Transcribe ALL visible content in markdown exactly as shown. Include the application name from the context above, URLs, file paths, and timestamps.
 
 While transcribing, note ONLY what you can clearly see:
-- Application names and window titles
+- Application names and window titles (use the provided context as the authoritative source)
 - Visible text content and UI elements
 - URLs and file paths that are clearly displayed
 - Any timestamps or dates visible on screen

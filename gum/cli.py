@@ -79,7 +79,8 @@ async def main():
         import logging
         logging.basicConfig(level=logging.INFO, format="%(asctime)s [Screen] %(message)s", datefmt="%H:%M:%S")
         
-        async with gum(user_name, model, Screen(model, debug=True)) as gum_instance:
+        screen_model = os.getenv("SCREEN_MODEL", model)
+        async with gum(user_name, model, Screen(screen_model, debug=True)) as gum_instance:
             await asyncio.Future()  # run forever (Ctrl-C to stop)
 
 def cli():

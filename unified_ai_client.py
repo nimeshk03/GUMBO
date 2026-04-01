@@ -159,16 +159,20 @@ class UnifiedAIClient:
         self,
         messages: List[Dict[str, Any]],
         max_tokens: int = 1000,
-        temperature: float = 0.1
+        temperature: float = 0.1,
+        model: str = None,
     ) -> str:
         """
         Handle text-only completion using the configured text provider.
-        
+
         Args:
             messages: List of message dictionaries (standard OpenAI format)
             max_tokens: Maximum tokens to generate
             temperature: Temperature for generation
-            
+            model: Optional per-task model override (e.g. from PROPOSE_MODEL or
+                   SUGGEST_MODEL env vars). Takes precedence over the default
+                   model configured via OPENAI_MODEL.
+
         Returns:
             The AI response content as a string
         """
@@ -177,7 +181,8 @@ class UnifiedAIClient:
             return await openai_text_completion(
                 messages=messages,
                 max_tokens=max_tokens,
-                temperature=temperature
+                temperature=temperature,
+                model=model,
             )
         else:  # Default to Azure OpenAI
             logger.info("Routing to Azure OpenAI for text completion")

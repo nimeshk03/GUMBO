@@ -272,6 +272,17 @@ class gum:
             self.engine, self.Session = await init_db(
                 self._db_name, self._data_directory
             )
+            # Wire the session factory to the Gumbo engine so suggestions are
+            # persisted regardless of whether GUM is started via CLI or the API
+            # controller.  The controller wires it again at startup which is a
+            # no-op because set_db_session_factory is idempotent.
+            try:
+                from .services.gumbo_engine import get_gumbo_engine
+                gumbo_engine = await get_gumbo_engine()
+                gumbo_engine.set_db_session_factory(self.Session)
+                self.logger.info("Gumbo engine session factory wired from connect_db")
+            except Exception as e:
+                self.logger.warning(f"Could not wire Gumbo session factory: {e}")
 
     async def __aenter__(self):
         """Async context manager entry point.
@@ -351,17 +362,14 @@ class gum:
             .replace("{inputs}", update.content)
         )
 
-        # Get the unified AI client
         client = await self._get_ai_client()
-        
-        # Make the API call using the unified client
         response_content = await client.text_completion(
             messages=[{"role": "user", "content": prompt}],
-            max_tokens=2000,
-            temperature=0.1
+            max_tokens=8192,
+            temperature=0.1,
+            model=os.getenv("PROPOSE_MODEL"),
         )
 
-        # Parse the JSON response
         return self._parse_ai_json_response(response_content, "propositions")
 
     async def _build_relation_prompt(self, all_props) -> str:
@@ -401,17 +409,14 @@ class gum:
         ]
         prompt_text = await self._build_relation_prompt(payload)
 
-        # Get the unified AI client
         client = await self._get_ai_client()
-        
-        # Make the API call using the unified client
         response_content = await client.text_completion(
             messages=[{"role": "user", "content": prompt_text}],
-            max_tokens=2000,
-            temperature=0.1
+            max_tokens=4096,
+            temperature=0.1,
+            model=os.getenv("PROPOSE_MODEL"),
         )
 
-        # Parse the JSON response and validate
         try:
             relations_data = self._parse_ai_json_response(response_content, "relations")
             data = RelationSchema.model_validate({"relations": relations_data})
@@ -482,29 +487,32 @@ class gum:
         """
         body = await self._build_revision_body(similar_cluster, related_obs)
         prompt = self.revise_prompt.replace("{body}", body).replace("{user_name}", self.user_name)
-        
-        # Get the unified AI client
+
         client = await self._get_ai_client()
-        
-        # Make the API call using the unified client
         response_content = await client.text_completion(
             messages=[{"role": "user", "content": prompt}],
-            max_tokens=2000,
-            temperature=0.1
+            max_tokens=8192,
+            temperature=0.1,
+            model=os.getenv("PROPOSE_MODEL"),
         )
 
-        # Parse the JSON response
         return self._parse_ai_json_response(response_content, "propositions")
 
     async def _generate_and_search(
         self, session: AsyncSession, update: Update, obs: Observation
     ) -> list[Proposition]:
 
+        self.logger.info(
+            f"[PIPELINE] Step 3 — Calling LLM (PROPOSE_MODEL={os.getenv('PROPOSE_MODEL', 'default')}) "
+            f"to generate propositions..."
+        )
         drafts_raw = await self._construct_propositions(update)
+        self.logger.info(f"[PIPELINE] Step 3 — LLM returned {len(drafts_raw)} raw propositions")
+
         drafts: list[Proposition] = []
         pool: dict[int, Proposition] = {}
 
-        for itm in drafts_raw:
+        for idx, itm in enumerate(drafts_raw):
             draft = Proposition(
                 text=itm["proposition"],
                 reasoning=itm["reasoning"],
@@ -515,6 +523,12 @@ class gum:
             )
             drafts.append(draft)
 
+            text_preview = draft.text[:100].replace("\n", " ")
+            self.logger.info(
+                f"[PIPELINE]   Proposition {idx + 1}/{len(drafts_raw)}: "
+                f"confidence={draft.confidence}, decay={draft.decay} | {text_preview}..."
+            )
+
             # search existing persisted props
             with session.no_autoflush:
                 hits = await search_propositions_bm25(
@@ -523,27 +537,42 @@ class gum:
                     enable_mmr=True,
                     enable_decay=True
                 )
-                
+
             for prop, _score in hits:
                 pool[prop.id] = prop
+
+        if pool:
+            self.logger.info(
+                f"[PIPELINE] Step 3 — Found {len(pool)} existing propositions in DB "
+                f"matching the new drafts (will be included in similarity filter)"
+            )
 
         session.add_all(drafts)
         await session.flush()
 
-        # Gumbo trigger: Check for high-confidence propositions
+        # Gumbo trigger: check confidence threshold for each new proposition
+        gumbo_threshold = 8
         for draft in drafts:
             pool[draft.id] = draft
-            
-            # Trigger Gumbo if confidence >= 8
-            if draft.confidence and draft.confidence >= 8:
+
+            if draft.confidence and draft.confidence >= gumbo_threshold:
+                self.logger.info(
+                    f"[PIPELINE] Gumbo TRIGGER — proposition id={draft.id} "
+                    f"has confidence={draft.confidence} >= {gumbo_threshold}. "
+                    f"Queuing suggestion generation..."
+                )
                 try:
-                    # Import here to avoid circular imports
                     from .services.gumbo_engine import trigger_gumbo_suggestions
-                    # Fire and forget - don't block proposition creation
                     asyncio.create_task(trigger_gumbo_suggestions(draft.id, session))
-                    self.logger.info(f"🎯 Gumbo triggered for high-confidence proposition {draft.id} (confidence: {draft.confidence})")
                 except Exception as e:
-                    self.logger.error(f"Failed to trigger Gumbo for proposition {draft.id}: {e}")
+                    self.logger.error(
+                        f"[PIPELINE] Failed to trigger Gumbo for proposition id={draft.id}: {e}"
+                    )
+            else:
+                self.logger.info(
+                    f"[PIPELINE] Gumbo SKIP — proposition id={draft.id} "
+                    f"has confidence={draft.confidence} (threshold={gumbo_threshold})"
+                )
 
         return list(pool.values())
 
@@ -563,6 +592,10 @@ class gum:
         if not similar:
             return
 
+        self.logger.info(
+            f"[PIPELINE] Revising {len(similar)} similar propositions with supporting observations..."
+        )
+
         rel_obs = {
             o
             for p in similar
@@ -571,6 +604,16 @@ class gum:
         rel_obs.add(obs)
 
         revised_items = await self._revise_propositions(list(rel_obs), similar)
+        self.logger.info(
+            f"[PIPELINE] Revision complete: {len(similar)} similar propositions "
+            f"-> {len(revised_items)} revised propositions (new versions)"
+        )
+        for idx, item in enumerate(revised_items):
+            preview = item.get("proposition", "")[:100].replace("\n", " ")
+            self.logger.info(
+                f"[PIPELINE]   Revised {idx + 1}/{len(revised_items)}: "
+                f"confidence={item.get('confidence')}, decay={item.get('decay')} | {preview}..."
+            )
         newest_version = max(p.version for p in similar)
         parent_groups = {p.revision_group for p in similar}
         if len(parent_groups) == 1:
@@ -638,17 +681,14 @@ class gum:
             .replace("{user_name}", self.user_name)
         )
 
-        # Get the unified AI client
         client = await self._get_ai_client()
-        
-        # Make the API call using the unified client
         response_content = await client.text_completion(
             messages=[{"role": "user", "content": prompt}],
-            max_tokens=1000,
-            temperature=0.0
+            max_tokens=2000,
+            temperature=0.0,
+            model=os.getenv("PROPOSE_MODEL"),
         )
 
-        # Parse the JSON response
         decision = self._parse_ai_json_response(response_content)
         
         # Safely handle the decision with fallbacks
@@ -667,7 +707,11 @@ class gum:
         return False
 
     async def _default_handler(self, observer: Observer, update: Update) -> None:
-        self.logger.info(f"Processing update from {observer.name}")
+        content_preview = update.content[:120].replace("\n", " ")
+        self.logger.info(
+            f"[PIPELINE] Step 1 — Observation received from '{observer.name}' "
+            f"({len(update.content)} chars): {content_preview}..."
+        )
 
         async with self._session() as session:
             observation = Observation(
@@ -677,26 +721,39 @@ class gum:
             )
 
             if await self._handle_audit(observation):
+                self.logger.info("[PIPELINE] Audit blocked this observation — skipping")
                 return
 
             session.add(observation)
-            await session.flush() # Observation gets its ID
+            await session.flush()
+            self.logger.info(f"[PIPELINE] Step 2 — Observation stored (id={observation.id})")
 
             pool = await self._generate_and_search(session, update, observation)
 
             if pool:
-                self.logger.info(f"Linking observation to {len(pool)} candidate propositions.")
+                self.logger.info(
+                    f"[PIPELINE] Step 4 — Linking observation {observation.id} "
+                    f"to {len(pool)} candidate propositions"
+                )
                 for prop in pool:
                     await self._attach_obs_if_missing(prop, observation, session)
                 await session.flush()
 
             identical, similar, different = await self._filter_propositions(pool)
+            self.logger.info(
+                f"[PIPELINE] Step 5 — Similarity filter: "
+                f"{len(identical)} identical, {len(similar)} similar, {len(different)} different"
+            )
 
-            self.logger.info("Applying proposition updates...")
             await self._handle_identical(session, identical, observation)
             await self._handle_similar(session, similar, observation)
             await self._handle_different(session, different, observation)
-            self.logger.info("Completed processing update")
+            self.logger.info(
+                f"[PIPELINE] Step 6 — Proposition updates applied. "
+                f"Identical linked: {len(identical)}, "
+                f"Similar revised into new versions: {len(similar)}, "
+                f"Different linked: {len(different)}"
+            )
 
     @asynccontextmanager
     async def _session(self):
